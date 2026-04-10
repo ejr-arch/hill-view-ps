@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>School Report System</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <script>
+      window.SUPABASE_CONFIG = {
+        url: "https://YOUR_PROJECT.supabase.co",
+        anonKey: "YOUR_PUBLISHABLE_KEY",
+        edgeFunction: "report-summary",
+        storageBucket: "school-assets"
+      };
+    </script>
+
+    <div class="page-shell">
+      <section class="auth-screen" id="authScreen">
+        <div class="auth-card">
+          <div class="eyebrow">Supabase Auth</div>
+          <h1>School Report System</h1>
+          <p class="auth-copy">
+            Sign in with your Supabase account. Role, class access, and view
+            permissions are derived from the database.
+          </p>
+          <form class="auth-form" id="loginForm">
+            <input id="emailInput" type="email" placeholder="Email" required />
+            <input
+              id="passwordInput"
+              type="password"
+              placeholder="Password"
+              required
+            />
+            <button type="submit" class="btn btn-primary">Login</button>
+          </form>
+          <p class="message" id="authMessage"></p>
+        </div>
+      </section>
+
+      <section class="app-shell hidden" id="appShell">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Supabase Web View</div>
+            <h2 id="screenTitle">Dashboard</h2>
+            <p class="subtle" id="screenSubtitle"></p>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn" id="refreshButton" type="button">Refresh</button>
+            <button class="btn btn-primary" id="logoutButton" type="button">
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <main class="dashboard-grid">
+          <aside class="panel side-panel">
+            <div class="identity-block">
+              <div class="identity-badge" id="identityBadge">--</div>
+              <div>
+                <div class="identity-name" id="identityName">--</div>
+                <div class="identity-meta" id="identityMeta">--</div>
+              </div>
+            </div>
+
+            <div class="stack">
+              <h3>Supabase Features</h3>
+              <div class="chip-grid">
+                <span class="chip">Auth</span>
+                <span class="chip">Database</span>
+                <span class="chip">RLS</span>
+                <span class="chip">Realtime</span>
+                <span class="chip">Storage</span>
+                <span class="chip">Edge Functions</span>
+              </div>
+            </div>
+
+            <div class="stack">
+              <h3>Realtime Feed</h3>
+              <ul class="event-feed" id="eventFeed"></ul>
+            </div>
+          </aside>
+
+          <section class="content-column">
+            <div class="metrics" id="metricsGrid"></div>
+
+            <section class="panel hidden" id="teacherView">
+              <div class="section-head">
+                <div>
+                  <h3>Teacher View</h3>
+                  <p class="subtle">
+                    Marks entry is restricted to the assigned class by RLS.
+                  </p>
+                </div>
+              </div>
+              <div class="toolbar">
+                <form class="inline-form" id="newPupilForm">
+                  <input
+                    id="newPupilInput"
+                    type="text"
+                    placeholder="Add pupil to this class"
+                  />
+                  <button class="btn" type="submit">Add Pupil</button>
+                </form>
+              </div>
+              <div class="table-wrap" id="teacherTableWrap"></div>
+            </section>
+
+            <section class="panel hidden" id="adminView">
+              <div class="section-head">
+                <div>
+                  <h3>Admin View</h3>
+                  <p class="subtle">
+                    School-wide analytics, teacher progress, and report data.
+                  </p>
+                </div>
+              </div>
+              <div class="admin-grid">
+                <div class="subpanel">
+                  <h4>Teacher Progress</h4>
+                  <div id="teacherProgress"></div>
+                </div>
+                <div class="subpanel">
+                  <h4>Class Performance</h4>
+                  <div id="classPerformance"></div>
+                </div>
+                <div class="subpanel span-2">
+                  <h4>All Pupils</h4>
+                  <div id="adminPupilTable"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="feature-grid">
+              <section class="panel">
+                <div class="section-head">
+                  <div>
+                    <h3>Storage</h3>
+                    <p class="subtle">
+                      Upload a school asset to Supabase Storage.
+                    </p>
+                  </div>
+                </div>
+                <form class="inline-form" id="storageForm">
+                  <input id="storageInput" type="file" />
+                  <button class="btn" type="submit">Upload</button>
+                </form>
+                <p class="message" id="storageMessage"></p>
+              </section>
+
+              <section class="panel">
+                <div class="section-head">
+                  <div>
+                    <h3>Edge Function</h3>
+                    <p class="subtle">
+                      Invoke a function for report summary generation.
+                    </p>
+                  </div>
+                </div>
+                <button class="btn" id="edgeButton" type="button">
+                  Invoke Function
+                </button>
+                <pre class="code-box" id="edgeResult">No invocation yet.</pre>
+              </section>
+            </section>
+          </section>
+        </main>
+      </section>
+    </div>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
