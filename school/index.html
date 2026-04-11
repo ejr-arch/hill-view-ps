@@ -1,174 +1,1439 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>School Report System</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <script>
-      window.SUPABASE_CONFIG = {
-        url: "https://YOUR_PROJECT.supabase.co",
-        anonKey: "YOUR_PUBLISHABLE_KEY",
-        edgeFunction: "report-summary",
-        storageBucket: "school-assets"
-      };
-    </script>
 
-    <div class="page-shell">
-      <section class="auth-screen" id="authScreen">
-        <div class="auth-card">
-          <div class="eyebrow">Supabase Auth</div>
-          <h1>School Report System</h1>
-          <p class="auth-copy">
-            Sign in with your Supabase account. Role, class access, and view
-            permissions are derived from the database.
-          </p>
-          <form class="auth-form" id="loginForm">
-            <input id="emailInput" type="email" placeholder="Email" required />
-            <input
-              id="passwordInput"
-              type="password"
-              placeholder="Password"
-              required
-            />
-            <button type="submit" class="btn btn-primary">Login</button>
-          </form>
-          <p class="message" id="authMessage"></p>
-        </div>
-      </section>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Hill View Primary School — Reports</title>
+	<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
 
-      <section class="app-shell hidden" id="appShell">
-        <header class="topbar">
-          <div>
-            <div class="eyebrow">Supabase Web View</div>
-            <h2 id="screenTitle">Dashboard</h2>
-            <p class="subtle" id="screenSubtitle"></p>
-          </div>
-          <div class="topbar-actions">
-            <button class="btn" id="refreshButton" type="button">Refresh</button>
-            <button class="btn btn-primary" id="logoutButton" type="button">
-              Logout
-            </button>
-          </div>
-        </header>
+<body>
+	<div id="app"></div>
+	<div class="save-toast" id="toast">✓ Marks saved</div>
 
-        <main class="dashboard-grid">
-          <aside class="panel side-panel">
-            <div class="identity-block">
-              <div class="identity-badge" id="identityBadge">--</div>
-              <div>
-                <div class="identity-name" id="identityName">--</div>
-                <div class="identity-meta" id="identityMeta">--</div>
-              </div>
-            </div>
+	<script>
+		// ══════════════════════════════════════════════════
+		//  CONFIG — matches hill-view-ps Supabase project
+		// ══════════════════════════════════════════════════
+		const SUPA_URL = 'https://gtguutliwmhntuigcqta.supabase.co';
+		const SUPA_KEY = 'sb_publishable_32CnYot-3Kn2ysRljL9-zQ_G5r_QqLI';
+		const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-            <div class="stack">
-              <h3>Supabase Features</h3>
-              <div class="chip-grid">
-                <span class="chip">Auth</span>
-                <span class="chip">Database</span>
-                <span class="chip">RLS</span>
-                <span class="chip">Realtime</span>
-                <span class="chip">Storage</span>
-                <span class="chip">Edge Functions</span>
-              </div>
-            </div>
+		// ══════════════════════════════════════════════════
+		//  SCHEMA KNOWLEDGE (matches seed.sql exactly)
+		//  Subject levels: 'nursery' | 'p1-p3' | 'p4-p7'
+		//  Class→level:  KG* → nursery, P1/P2/P3 → p1-p3, P4+ → p4-p7
+		//  P7 grade: class name starts with 'P7'
+		// ══════════════════════════════════════════════════
+		const resolveLevel = name => {
+			if (name.startsWith('KG')) return 'nursery';
+			if (/^P[123]/.test(name)) return 'p1-p3';
+			return 'p4-p7';
+		};
+		const isP7Class = name => /^P7/.test(name);
 
-            <div class="stack">
-              <h3>Realtime Feed</h3>
-              <ul class="event-feed" id="eventFeed"></ul>
-            </div>
-          </aside>
+		// ══════════════════════════════════════════════════
+		//  STATE
+		// ══════════════════════════════════════════════════
+		const S = {
+			user: null,          // from users table
+			view: 'overview',
+			// data
+			classes: [], subjects: [], pupils: [], marksMap: {},
+			// admin analytics (from views)
+			classPerf: [], submissions: [],
+			// teacher
+			selClass: null,      // admin class selector
+			pending: {},         // `${pupil_id}::${subject_id}` → score (unsaved)
+			saving: false,
+			saveMsg: null,
+			// report page
+			reportPupils: [],
+			reportSelId: null,
+			reportSummary: null,
+			reportSubjects: [],
+			// term settings (admin-controlled, used in all report prints)
+			termSettings: {
+				termLabel: 'Term 2, 2025',
+				endDate: '',
+				nextTermStart: '',
+				settingsMsg: null,
+			},
+			// ui
+			loading: true,
+			chartInst: null,
+			toastTimer: null,
+		};
 
-          <section class="content-column">
-            <div class="metrics" id="metricsGrid"></div>
+		// ══════════════════════════════════════════════════
+		//  CALC (client-side live recalc from pending edits)
+		// ══════════════════════════════════════════════════
+		const toAgg = s => s >= 90 ? 1 : s >= 80 ? 2 : s >= 70 ? 3 : s >= 60 ? 4 : s >= 50 ? 5 : s >= 40 ? 6 : s >= 30 ? 7 : 8;
+		const pleGrade = t => t === 4 ? 'D1' : t <= 6 ? 'D2' : t <= 8 ? 'C3' : t <= 10 ? 'C4' : t <= 12 ? 'P5' : t <= 14 ? 'P6' : t <= 16 ? 'P7' : 'F9';
+		const gradeStyle = g => {
+			if (['D1', 'D2'].includes(g)) return 'background:#d1f0dc;color:#0a4f24';
+			if (['C3', 'C4'].includes(g)) return 'background:#d0e8ff;color:#0a3a6b';
+			if (['P5', 'P6', 'P7'].includes(g)) return 'background:#fff3cd;color:#7a5300';
+			return 'background:#fde0e0;color:#7a1111';
+		};
+		const scoreClass = v => v >= 80 ? 'sb-a' : v >= 60 ? 'sb-b' : v >= 40 ? 'sb-c' : 'sb-f';
+		const scoreLabel = v => v >= 80 ? 'Excellent' : v >= 60 ? 'Good' : v >= 40 ? 'Average' : 'Needs Improvement';
 
-            <section class="panel hidden" id="teacherView">
-              <div class="section-head">
-                <div>
-                  <h3>Teacher View</h3>
-                  <p class="subtle">
-                    Marks entry is restricted to the assigned class by RLS.
-                  </p>
-                </div>
-              </div>
-              <div class="toolbar">
-                <form class="inline-form" id="newPupilForm">
-                  <input
-                    id="newPupilInput"
-                    type="text"
-                    placeholder="Add pupil to this class"
-                  />
-                  <button class="btn" type="submit">Add Pupil</button>
-                </form>
-              </div>
-              <div class="table-wrap" id="teacherTableWrap"></div>
-            </section>
+		const markKey = (pid, sid) => `${pid}::${sid}`;
+		const getScore = (pid, sid) => {
+			const k = markKey(pid, sid);
+			return S.pending[k] !== undefined ? S.pending[k] : (S.marksMap[k] ?? 0);
+		};
 
-            <section class="panel hidden" id="adminView">
-              <div class="section-head">
-                <div>
-                  <h3>Admin View</h3>
-                  <p class="subtle">
-                    School-wide analytics, teacher progress, and report data.
-                  </p>
-                </div>
-              </div>
-              <div class="admin-grid">
-                <div class="subpanel">
-                  <h4>Teacher Progress</h4>
-                  <div id="teacherProgress"></div>
-                </div>
-                <div class="subpanel">
-                  <h4>Class Performance</h4>
-                  <div id="classPerformance"></div>
-                </div>
-                <div class="subpanel span-2">
-                  <h4>All Pupils</h4>
-                  <div id="adminPupilTable"></div>
-                </div>
-              </div>
-            </section>
+		function classSubs(classId) {
+			const cls = S.classes.find(c => c.id === classId); if (!cls) return [];
+			return S.subjects.filter(s => s.level === resolveLevel(cls.name));
+		}
 
-            <section class="feature-grid">
-              <section class="panel">
-                <div class="section-head">
-                  <div>
-                    <h3>Storage</h3>
-                    <p class="subtle">
-                      Upload a school asset to Supabase Storage.
-                    </p>
-                  </div>
-                </div>
-                <form class="inline-form" id="storageForm">
-                  <input id="storageInput" type="file" />
-                  <button class="btn" type="submit">Upload</button>
-                </form>
-                <p class="message" id="storageMessage"></p>
-              </section>
+		function rankPupils(classId) {
+			const subs = classSubs(classId);
+			return S.pupils.filter(p => p.class_id === classId)
+				.map(p => {
+					const scores = subs.map(s => getScore(p.id, s.id));
+					const total = scores.reduce((a, b) => a + b, 0);
+					const avg = subs.length ? total / subs.length : 0;
+					return {...p, scores, total, avg};
+				})
+				.sort((a, b) => b.avg - a.avg)
+				.map((p, i) => ({...p, pos: i + 1}));
+		}
 
-              <section class="panel">
-                <div class="section-head">
-                  <div>
-                    <h3>Edge Function</h3>
-                    <p class="subtle">
-                      Invoke a function for report summary generation.
-                    </p>
-                  </div>
-                </div>
-                <button class="btn" id="edgeButton" type="button">
-                  Invoke Function
-                </button>
-                <pre class="code-box" id="edgeResult">No invocation yet.</pre>
-              </section>
-            </section>
-          </section>
-        </main>
-      </section>
+		function pleCalc(pupilId, classId) {
+			const subs = classSubs(classId); // p4-p7 level subs
+			const aggs = subs.map(s => ({s, sc: getScore(pupilId, s.id), ag: toAgg(getScore(pupilId, s.id))}));
+			const best4 = [...aggs].sort((a, b) => a.ag - b.ag).slice(0, 4);
+			const tot = best4.reduce((s, a) => s + a.ag, 0);
+			return {aggs, best4, tot, grade: pleGrade(tot)};
+		}
+
+		// ══════════════════════════════════════════════════
+		//  DATA LOADING
+		// ══════════════════════════════════════════════════
+		async function loadAll() {
+			S.loading = true; render();
+
+			// Load term settings early (local instant, then remote async)
+			await loadTermSettingsRemote();
+
+			// Core tables
+			const [clsR, subR, pupR] = await Promise.all([
+				db.from('classes').select('id,name').order('name'),
+				db.from('subjects').select('id,name,level').order('name'),
+				db.from('pupils').select('id,name,class_id').order('name'),  // RLS filters teachers
+			]);
+			S.classes = clsR.data || [];
+			S.subjects = subR.data || [];
+			S.pupils = pupR.data || [];
+
+			// Marks
+			S.marksMap = {};
+			const pids = S.pupils.map(p => p.id);
+			if (pids.length) {
+				for (let i = 0; i < pids.length; i += 200) {
+					const {data: mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id', pids.slice(i, i + 200));
+					(mks || []).forEach(m => {S.marksMap[markKey(m.pupil_id, m.subject_id)] = m.score;});
+				}
+			}
+
+			// Admin: load views
+			if (S.user.role === 'admin') {
+				const [perfR, subStatusR] = await Promise.all([
+					db.from('class_performance').select('class_id,class_name,average_score,best_pupil,weakest_pupil').order('class_name'),
+					db.from('teacher_submission_status').select('teacher_name,class_name,subjects_entered,subject_count').order('class_name'),
+				]);
+				S.classPerf = perfR.data || [];
+				S.submissions = subStatusR.data || [];
+			}
+
+			// Default selection
+			if (!S.selClass) S.selClass = S.classes[0]?.id || null;
+
+			S.loading = false; S.pending = {}; render();
+		}
+
+		async function loadReportPupils() {
+			const {data} = await db.from('pupil_report_summary')
+				.select('pupil_id,pupil_name,class_name').order('class_name').order('pupil_name');
+			S.reportPupils = data || [];
+			if (!S.reportSelId && S.reportPupils.length) S.reportSelId = S.reportPupils[0].pupil_id;
+			if (S.reportSelId) await loadReportForPupil(S.reportSelId);
+			else render();
+		}
+
+		async function loadReportForPupil(pupilId) {
+			S.reportSelId = pupilId;
+			const [sumR, subjR] = await Promise.all([
+				db.from('pupil_report_summary').select('pupil_id,pupil_name,class_name,total_score,average_score,position,uneb_grade').eq('pupil_id', pupilId).single(),
+				db.from('pupil_report_subjects').select('subject_name,score').eq('pupil_id', pupilId),
+			]);
+			S.reportSummary = sumR.data || null;
+			S.reportSubjects = subjR.data || [];
+			render();
+		}
+
+		// ══════════════════════════════════════════════════
+		//  MARKS SAVE (batch — matches /api/teacher/marks)
+		// ══════════════════════════════════════════════════
+		async function saveMarks() {
+			const updates = Object.entries(S.pending).map(([k, score]) => {
+				const [pupil_id, subject_id] = k.split('::');
+				return {pupil_id, subject_id, score: parseInt(score) || 0};
+			});
+			if (!updates.length) {S.saveMsg = 'No changes to save.'; render(); return;}
+			S.saving = true; S.saveMsg = null; render();
+			const {data: {user}} = await db.auth.getUser();
+			const payload = updates.map(u => ({...u, teacher_id: user.id}));
+			const {error} = await db.from('marks').upsert(payload, {onConflict: 'pupil_id,subject_id'});
+			if (error) {S.saveMsg = 'Error: ' + error.message;}
+			else {
+				updates.forEach(u => {S.marksMap[markKey(u.pupil_id, u.subject_id)] = u.score;});
+				S.pending = {}; S.saveMsg = 'Marks saved successfully.';
+				flashToast();
+			}
+			S.saving = false; render();
+		}
+
+		async function addPupil(name, classId) {
+			const {data, error} = await db.from('pupils').insert({name, class_id: classId}).select('id,name,class_id').single();
+			if (error) return error.message;
+			S.pupils = [...S.pupils, data];
+			render(); return null;
+		}
+
+		function setPending(pid, sid, val) {
+			const v = Math.max(0, Math.min(100, parseInt(val) || 0));
+			S.pending[markKey(pid, sid)] = v;
+			// live-update avg/pos in DOM without full re-render
+			refreshLiveRow(pid, sid);
+		}
+
+		function refreshLiveRow(pid, sid) {
+			const p = S.pupils.find(x => x.id === pid); if (!p) return;
+			const cid = p.class_id;
+			const cls = S.classes.find(c => c.id === cid);
+			const p7 = cls && isP7Class(cls.name);
+			rankPupils(cid).forEach(rp => {
+				const ae = document.getElementById(`avg-${rp.id}`); if (ae) ae.textContent = rp.avg.toFixed(1);
+				const pe = document.getElementById(`pos-${rp.id}`); if (pe) {pe.innerHTML = ''; pe.appendChild(mkPosB(rp.pos));}
+				if (p7) {const ge = document.getElementById(`grade-${rp.id}`); if (ge) {const pd = pleCalc(rp.id, cid); ge.innerHTML = ''; const s = e('span', {class: 'grade-b', style: gradeStyle(pd.grade)}); s.textContent = pd.grade; ge.appendChild(s);} }
+			});
+		}
+
+		function flashToast() {
+			if (S.toastTimer) clearTimeout(S.toastTimer);
+			const t = document.getElementById('toast'); if (t) {t.classList.add('show'); S.toastTimer = setTimeout(() => t.classList.remove('show'), 2200);}
+		}
+
+		// ══════════════════════════════════════════════════
+		//  AUTH
+		// ══════════════════════════════════════════════════
+		async function signIn(email, pw) {
+			const {data, error} = await db.auth.signInWithPassword({email, password: pw});
+			if (error) return error.message;
+			// Read from 'users' table (not 'profiles') — matches actual schema
+			const {data: u, error: ue} = await db.from('users').select('id,name,email,role,class_id').eq('id', data.user.id).single();
+			if (ue || !u) return 'Account found but no user record. Run mock_data.sql in Supabase first.';
+			S.user = u; S.view = u.role === 'admin' ? 'overview' : 'marks';
+			await loadAll(); return null;
+		}
+
+		async function signOut() {
+			await db.auth.signOut();
+			Object.assign(S, {user: null, view: 'overview', classes: [], subjects: [], pupils: [], marksMap: {}, classPerf: [], submissions: [], selClass: null, pending: {}, saving: false, saveMsg: null, reportPupils: [], reportSelId: null, reportSummary: null, reportSubjects: [], loading: false, chartInst: null});
+			render();
+		}
+
+		// ══════════════════════════════════════════════════
+		//  PRINT REPORT — routes to correct template
+		// ══════════════════════════════════════════════════
+		function printReport(summary, subjects) {
+			const isNursery = resolveLevel(summary.class_name) === 'nursery';
+			if (isNursery) printNurseryReport(summary, subjects);
+			else printPrimaryReport(summary, subjects);
+		}
+
+		// ── Shared assets ─────────────────────────────────
+		const LOGO_PATH = 'assets/logo.jpg';
+		const SCHOOL_NAME = 'Hill View Primary School';
+		const SCHOOL_MOTTO = '"Striving for Excellence"';
+		const SCHOOL_TEL = 'Tel: —';
+
+		// Live getters — always read from state so reports pick up admin changes immediately
+		const getTermLabel = () => S.termSettings.termLabel || 'Term —';
+		const getEndDate = () => S.termSettings.endDate || '—';
+		const getNextTermStart = () => S.termSettings.nextTermStart || '—';
+
+		// ── Term settings persistence (localStorage + Supabase app_settings table fallback) ──
+		const SETTINGS_KEY = 'hillview_term_settings';
+
+		function loadTermSettingsLocal() {
+			try {
+				const raw = localStorage.getItem(SETTINGS_KEY);
+				if (raw) {
+					const parsed = JSON.parse(raw);
+					Object.assign(S.termSettings, parsed);
+				}
+			} catch (e) { }
+		}
+
+		async function saveTermSettings() {
+			const payload = {
+				termLabel: S.termSettings.termLabel,
+				endDate: S.termSettings.endDate,
+				nextTermStart: S.termSettings.nextTermStart,
+			};
+			// Always save locally first (instant)
+			try {localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));} catch (e) { }
+			// Also persist to Supabase app_settings table if it exists (graceful fail)
+			try {
+				await db.from('app_settings').upsert(
+					{key: 'term', value: JSON.stringify(payload)},
+					{onConflict: 'key'}
+				);
+			} catch (e) { }
+			S.termSettings.settingsMsg = 'saved';
+			render();
+			setTimeout(() => {S.termSettings.settingsMsg = null; render();}, 2500);
+		}
+
+		async function loadTermSettingsRemote() {
+			loadTermSettingsLocal(); // load local first for speed
+			try {
+				const {data} = await db.from('app_settings').select('value').eq('key', 'term').single();
+				if (data?.value) {
+					const parsed = JSON.parse(data.value);
+					Object.assign(S.termSettings, parsed);
+					// Keep local in sync
+					try {localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));} catch (e) { }
+				}
+			} catch (e) { } // table may not exist yet — silent fail
+		}
+
+		// Dot colour from nursery score (0-100 numeric)
+		function nurseryDotColor(score) {
+			if (score >= 85) return '#1a7a3c'; // green  = Excellent
+			if (score >= 70) return '#1565c0'; // blue   = Very Good
+			if (score >= 50) return '#f9a825'; // yellow = Good
+			return '#c62828';                  // red    = Needs Improvement
+		}
+		function nurseryDotSvg(score) {
+			const c = nurseryDotColor(score);
+			return `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="10" fill="${c}"/></svg>`;
+		}
+		function nurseryLabel(score) {
+			if (score >= 85) return 'Excellent';
+			if (score >= 70) return 'Very Good';
+			if (score >= 50) return 'Good';
+			return 'Needs Improvement';
+		}
+
+		// Primary score colour
+		function primaryScoreColor(score) {
+			if (score >= 80) return '#0a4f24';
+			if (score >= 60) return '#0a3a6b';
+			if (score >= 40) return '#7a5300';
+			return '#c0392b';
+		}
+		function primaryRemarks(score) {
+			if (score >= 80) return 'Excellent';
+			if (score >= 60) return 'Good';
+			if (score >= 40) return 'Average';
+			return 'Needs Improvement';
+		}
+
+		// ── NURSERY REPORT TEMPLATE ───────────────────────
+		function printNurseryReport(summary, subjects) {
+			const w = window.open('', '_blank');
+
+			// ── Learning Areas come from DB (scored, show coloured dot) ──────────────
+			// Skills and Habits are fixed lists — printed as EMPTY circles for teacher
+			// to shade by hand based on observation.
+
+			const SKILLS = [
+				'Singing', 'Listening', 'Physical Education',
+				'Leadership', 'Shading & Drawing', 'Poems & Rhythms'
+			];
+			const HABITS = [
+				'Relates with Others', 'Cleanliness', 'Toilet Use',
+				'Punctuality', 'Attendance', 'Sharing'
+			];
+
+			// Empty circle SVG — teacher shades by hand
+			const emptyCircle = `<svg width="22" height="22" viewBox="0 0 22 22">
+    <circle cx="11" cy="11" r="9" fill="none" stroke="#111" stroke-width="1.8"/>
+  </svg>`;
+
+			const maxRows = Math.max(subjects.length, SKILLS.length, HABITS.length);
+			let tableRows = '';
+			for (let i = 0; i < maxRows; i++) {
+				const la = subjects[i];
+				const sk = SKILLS[i] || '';
+				const hb = HABITS[i] || '';
+				// Strip the "Learning Area N: " prefix for a cleaner printed label
+				const laLabel = la ? la.subject_name.replace(/^Learning Area \d+:\s*/i, '') : '';
+				tableRows += `<tr>
+      <td class="area-name">${laLabel}</td>
+      <td class="dot-cell">${la ? nurseryDotSvg(la.score) : ''}</td>
+      <td class="area-name">${sk}</td>
+      <td class="dot-cell">${sk ? emptyCircle : ''}</td>
+      <td class="area-name">${hb}</td>
+      <td class="dot-cell">${hb ? emptyCircle : ''}</td>
+    </tr>`;
+			}
+
+			const totalPupils = S.pupils.filter(p => {
+				const cls = S.classes.find(c => c.name === summary.class_name);
+				return cls && p.class_id === cls.id;
+			}).length;
+
+			w.document.write(`<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<title>Report — ${summary.pupil_name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  @media print{.noprint{display:none!important} body{margin:0;padding:10px}}
+  body{font-family:'Arial',sans-serif;font-size:12px;color:#111;background:#fff;padding:18px;max-width:780px;margin:0 auto}
+
+  .print-btn{display:block;margin:0 auto 16px;padding:9px 28px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
+
+  /* ── header ── */
+  .school-header{display:flex;align-items:center;gap:16px;border-bottom:3px double #1a6b3c;padding-bottom:10px;margin-bottom:8px}
+  .school-logo{width:72px;height:72px;object-fit:contain;flex-shrink:0}
+  .school-logo-placeholder{width:72px;height:72px;border-radius:50%;background:#e8f5ee;border:2px solid #1a6b3c;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a6b3c;text-align:center;font-weight:700;flex-shrink:0}
+  .school-info{flex:1;text-align:center}
+  .school-info h1{font-size:20px;font-weight:900;color:#1a4a24;text-transform:uppercase;letter-spacing:.04em}
+  .school-info .motto{font-style:italic;font-size:12px;color:#444;margin:2px 0}
+  .school-info .tel{font-size:11px;color:#666}
+
+  .report-title{text-align:center;font-size:14px;font-weight:900;text-transform:uppercase;border:2px solid #111;padding:5px 10px;margin:10px 0;letter-spacing:.04em}
+
+  /* ── pupil info ── */
+  .pupil-row{display:flex;gap:6px;align-items:baseline;margin-bottom:6px;font-size:12px}
+  .field-label{font-weight:700;white-space:nowrap}
+  .field-val{border-bottom:1.5px solid #111;flex:1;min-width:80px;padding:0 4px;font-size:13px;color:#1a4a24;font-weight:900;text-transform:uppercase}
+  .field-val.narrow{flex:none;width:90px}
+
+  /* ── key ── */
+  .key-section{border:1.5px solid #111;padding:7px 14px;margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:5px 24px}
+  .key-title{font-weight:900;font-size:11px;grid-column:span 2;margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em}
+  .key-item{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600}
+
+  /* ── position row ── */
+  .pos-row{display:flex;border:1.5px solid #111;margin-bottom:8px}
+  .pos-cell{flex:1;padding:5px 10px;border-right:1px solid #111;font-size:12px}
+  .pos-cell:last-child{border-right:none}
+  .pos-label{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#555}
+  .pos-value{font-size:17px;font-weight:900;color:#1a4a24;margin-top:2px}
+
+  /* ── assessment table ── */
+  .assess-table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  .assess-table th{
+    background:#1a4a24;color:#fff;text-align:center;
+    padding:6px 4px;font-size:11px;font-weight:700;
+    text-transform:uppercase;border:1px solid #111;letter-spacing:.03em
+  }
+  .assess-table td{border:1px solid #bbb;padding:5px 7px;vertical-align:middle}
+  .assess-table tbody tr:nth-child(even) td{background:#f8fdf9}
+  .area-name{font-weight:700;font-size:11px;text-transform:uppercase;width:24%}
+  .dot-cell{text-align:center;width:9%;padding:4px 2px!important}
+
+  /* note below table */
+  .obs-note{font-size:10px;color:#888;font-style:italic;margin-bottom:10px;padding-left:2px}
+
+  /* ── comments ── */
+  .comment-block{margin-bottom:8px}
+  .comment-label{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+  .comment-line{border-bottom:1px solid #bbb;height:20px;margin-bottom:4px}
+  .sig-row{display:flex;justify-content:flex-end;align-items:baseline;gap:6px;font-size:11px;margin-top:2px;margin-bottom:8px}
+  .sig-line{border-bottom:1.5px solid #111;width:180px}
+
+  /* ── finance ── */
+  .finance-section{border-top:1.5px solid #bbb;padding-top:8px;font-size:11px;margin-top:6px}
+  .finance-row{display:flex;gap:20px;margin-bottom:5px;flex-wrap:wrap}
+  .finance-item{display:flex;gap:5px;align-items:baseline}
+  .finance-label{font-weight:700;white-space:nowrap}
+  .finance-val{border-bottom:1px solid #111;min-width:90px;padding:0 4px}
+
+  .doc-footer{margin-top:14px;text-align:center;font-size:10px;color:#bbb;border-top:1px solid #eee;padding-top:6px}
+</style>
+</head><body>
+
+<button class="print-btn noprint" onclick="window.print()">🖨 Print / Save as PDF</button>
+
+<!-- HEADER -->
+<div class="school-header">
+  <img src="${LOGO_PATH}" alt="Logo" class="school-logo"
+       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <div class="school-logo-placeholder" style="display:none">LOGO</div>
+  <div class="school-info">
+    <h1>${SCHOOL_NAME}</h1>
+    <div class="motto">${SCHOOL_MOTTO}</div>
+    <div class="tel">${SCHOOL_TEL}</div>
+  </div>
+</div>
+
+<div class="report-title">End of Term Individual Assessment Report</div>
+
+<!-- PUPIL INFO -->
+<div class="pupil-row">
+  <span class="field-label">Name:</span>
+  <span class="field-val">${summary.pupil_name}</span>
+  <span class="field-label">Class:</span>
+  <span class="field-val narrow">${summary.class_name}</span>
+  <span class="field-label">Date:</span>
+  <span class="field-val narrow"></span>
+</div>
+
+<!-- KEY -->
+<div class="key-section">
+  <div class="key-title">Key (Learning Areas):</div>
+  <div class="key-item">
+    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#1a7a3c"/></svg>
+    Excellent (85%–100%)
+  </div>
+  <div class="key-item">
+    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#f9a825"/></svg>
+    Good (50%–69%)
+  </div>
+  <div class="key-item">
+    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#1565c0"/></svg>
+    Very Good (70%–84%)
+  </div>
+  <div class="key-item">
+    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#c62828"/></svg>
+    Needs Improvement (0%–49%)
+  </div>
+</div>
+
+<!-- POSITION ROW -->
+<div class="pos-row">
+  <div class="pos-cell">
+    <div class="pos-label">Position</div>
+    <div class="pos-value">${summary.position ?? '—'}</div>
+  </div>
+  <div class="pos-cell">
+    <div class="pos-label">Out of</div>
+    <div class="pos-value">${totalPupils}</div>
+  </div>
+  <div class="pos-cell">
+    <div class="pos-label">Term</div>
+    <div class="pos-value">${getTermLabel()}</div>
+  </div>
+</div>
+
+<!-- ASSESSMENT TABLE -->
+<table class="assess-table">
+  <thead>
+    <tr>
+      <th colspan="2">Learning Areas</th>
+      <th colspan="2">Skills</th>
+      <th colspan="2">Habits</th>
+    </tr>
+  </thead>
+  <tbody>${tableRows}</tbody>
+</table>
+<p class="obs-note">* Skills and Habits circles to be shaded by class teacher based on observation.</p>
+
+<!-- COMMENTS — left blank for handwriting -->
+<div class="comment-block">
+  <div class="comment-label">Class Teacher's Comment:</div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="sig-row">Signature: <span class="sig-line"></span></div>
+</div>
+
+<div class="comment-block">
+  <div class="comment-label">Head Teacher's Comment:</div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="sig-row">Signature: <span class="sig-line"></span></div>
+</div>
+
+<!-- FINANCE — balance/fees left blank for manual entry; dates from admin settings -->
+<div class="finance-section">
+  <div class="finance-row">
+    <div class="finance-item">
+      <span class="finance-label">This term's balance:</span>
+      <span class="finance-val"></span>
     </div>
+    <div class="finance-item">
+      <span class="finance-label">Next term's fees:</span>
+      <span class="finance-val"></span>
+    </div>
+  </div>
+  <div class="finance-row">
+    <div class="finance-item">
+      <span class="finance-label">This term ended on:</span>
+      <span class="finance-val">${getEndDate()}</span>
+    </div>
+    <div class="finance-item">
+      <span class="finance-label">Next term begins on:</span>
+      <span class="finance-val">${getNextTermStart()}</span>
+    </div>
+  </div>
+</div>
 
-    <script type="module" src="script.js"></script>
-  </body>
+<div class="doc-footer">Hill View Primary School — Report Management System</div>
+</body></html>`);
+			w.document.close();
+		}
+
+		// ── PRIMARY REPORT TEMPLATE ───────────────────────
+		function printPrimaryReport(summary, subjects) {
+			const w = window.open('', '_blank');
+			const isP7 = !!summary.uneb_grade;
+			const totalPupils = S.pupils.filter(p => {
+				const cls = S.classes.find(c => c.name === summary.class_name);
+				return cls && p.class_id === cls.id;
+			}).length;
+
+			w.document.write(`<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<title>Report — ${summary.pupil_name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  @media print{.noprint{display:none!important} body{margin:0}}
+  body{font-family:'Arial',sans-serif;font-size:12px;color:#111;background:#fff;padding:18px;max-width:780px;margin:0 auto}
+
+  .print-btn{display:block;margin:0 auto 16px;padding:9px 28px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
+
+  /* ── header ── */
+  .school-header{display:flex;align-items:center;gap:16px;border-bottom:3px double #1a6b3c;padding-bottom:10px;margin-bottom:8px}
+  .school-logo{width:72px;height:72px;object-fit:contain;flex-shrink:0}
+  .school-logo-placeholder{width:72px;height:72px;border-radius:50%;background:#e8f5ee;border:2px solid #1a6b3c;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a6b3c;text-align:center;font-weight:700;flex-shrink:0}
+  .school-info{flex:1;text-align:center}
+  .school-info h1{font-size:20px;font-weight:900;color:#1a4a24;text-transform:uppercase;letter-spacing:.04em}
+  .school-info .motto{font-style:italic;font-size:12px;color:#444;margin:2px 0}
+  .school-info .tel{font-size:11px;color:#666}
+
+  .report-title{text-align:center;font-size:14px;font-weight:900;text-transform:uppercase;border:2px solid #111;padding:5px 10px;margin:10px 0;letter-spacing:.04em}
+
+  /* ── pupil meta ── */
+  .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;border:1.5px solid #111;margin-bottom:8px}
+  .meta-cell{padding:6px 10px;border-right:1px solid #aaa}
+  .meta-cell:last-child{border-right:none}
+  .meta-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em}
+  .meta-value{font-size:15px;font-weight:900;color:#1a4a24;margin-top:2px}
+
+  /* ── marks table ── */
+  .marks-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+  .marks-table th{background:#1a4a24;color:#fff;padding:7px 10px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;border:1px solid #0f3020}
+  .marks-table th.center{text-align:center}
+  .marks-table td{padding:6px 10px;border-bottom:1px solid #ddd;border-left:1px solid #eee;vertical-align:middle}
+  .marks-table tr:nth-child(even) td{background:#f6faf7}
+  .marks-table tr:hover td{background:#edf7f1}
+  .marks-table .subj-name{font-weight:600;font-size:12px}
+  .score-cell{text-align:center;font-weight:900;font-size:15px}
+  .out-cell{text-align:center;color:#999;font-size:12px}
+  .remark-cell{font-weight:600;font-size:11px}
+
+  /* ── summary footer ── */
+  .summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;border:1.5px solid #111;margin-bottom:12px}
+  .sum-cell{padding:8px 10px;border-right:1px solid #aaa;text-align:center}
+  .sum-cell:last-child{border-right:none}
+  .sum-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em}
+  .sum-value{font-size:18px;font-weight:900;color:#1a4a24;margin-top:2px}
+
+  /* ── PLE grade chip ── */
+  .ple-section{margin-bottom:12px;padding:10px 14px;background:#e8f5ee;border:1.5px solid #1a6b3c;border-radius:6px;display:flex;align-items:center;gap:14px}
+  .ple-label{font-size:12px;font-weight:700;color:#0f4a2a}
+  .grade-chip{display:inline-block;padding:5px 20px;border-radius:20px;font-size:18px;font-weight:900}
+
+  /* ── comments ── */
+  .comment-section{margin-bottom:10px}
+  .comment-label{font-weight:700;font-size:11px;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+  .comment-line{border-bottom:1px solid #aaa;height:19px;margin-bottom:4px}
+  .sig-row{display:flex;justify-content:flex-end;font-size:11px;margin-bottom:8px;gap:6px;align-items:baseline}
+  .sig-line{border-bottom:1px solid #111;width:180px}
+
+  /* ── finance ── */
+  .finance-section{border-top:1.5px solid #aaa;padding-top:8px;font-size:11px;margin-top:6px}
+  .finance-row{display:flex;gap:16px;margin-bottom:4px;flex-wrap:wrap}
+  .finance-item{display:flex;gap:4px;align-items:baseline}
+  .finance-label{font-weight:700;white-space:nowrap}
+  .finance-val{border-bottom:1px solid #111;min-width:90px;padding:0 4px}
+
+  .doc-footer{margin-top:14px;text-align:center;font-size:10px;color:#bbb;border-top:1px solid #eee;padding-top:6px}
+</style>
+</head><body>
+
+<button class="print-btn noprint" onclick="window.print()">🖨 Print / Save as PDF</button>
+
+<!-- HEADER -->
+<div class="school-header">
+  <img src="${LOGO_PATH}" alt="Logo" class="school-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <div class="school-logo-placeholder" style="display:none">LOGO</div>
+  <div class="school-info">
+    <h1>${SCHOOL_NAME}</h1>
+    <div class="motto">${SCHOOL_MOTTO}</div>
+    <div class="tel">${SCHOOL_TEL}</div>
+  </div>
+</div>
+
+<div class="report-title">End of Term Academic Report Card</div>
+
+<!-- PUPIL META -->
+<div class="meta-grid">
+  <div class="meta-cell"><div class="meta-label">Pupil Name</div><div class="meta-value">${summary.pupil_name}</div></div>
+  <div class="meta-cell"><div class="meta-label">Class</div><div class="meta-value">${summary.class_name}</div></div>
+  <div class="meta-cell"><div class="meta-label">Term</div><div class="meta-value">${getTermLabel()}</div></div>
+</div>
+
+<!-- MARKS TABLE -->
+<table class="marks-table">
+  <thead><tr>
+    <th>Subject</th>
+    <th class="center">Score</th>
+    <th class="center">Out of</th>
+    <th>Remarks</th>
+  </tr></thead>
+  <tbody>
+    ${subjects.map((s, i) => `
+    <tr>
+      <td class="subj-name">${s.subject_name}</td>
+      <td class="score-cell" style="color:${primaryScoreColor(s.score)}">${s.score}</td>
+      <td class="out-cell">100</td>
+      <td class="remark-cell" style="color:${primaryScoreColor(s.score)}">${primaryRemarks(s.score)}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>
+
+<!-- SUMMARY BAR -->
+<div class="summary-bar">
+  <div class="sum-cell"><div class="sum-label">Total Score</div><div class="sum-value">${summary.total_score}</div></div>
+  <div class="sum-cell"><div class="sum-label">Average</div><div class="sum-value">${parseFloat(summary.average_score).toFixed(1)}%</div></div>
+  <div class="sum-cell"><div class="sum-label">Position</div><div class="sum-value">${summary.position ?? '—'} / ${totalPupils}</div></div>
+</div>
+
+${isP7 ? `
+<div class="ple-section">
+  <span class="ple-label">UNEB PLE Grade (P7):</span>
+  <span class="grade-chip" style="${gradeStyle(summary.uneb_grade)}">${summary.uneb_grade}</span>
+  <span style="font-size:11px;color:#555;margin-left:8px">Based on best 4 subjects</span>
+</div>` : ''}
+
+<!-- COMMENTS — left completely blank for handwriting -->
+<div class="comment-section">
+  <div class="comment-label">Class Teacher's Comment:</div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="sig-row">Signature: <span class="sig-line"></span></div>
+
+  <div class="comment-label">Head Teacher's Comment:</div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="comment-line"></div>
+  <div class="sig-row">Signature: <span class="sig-line"></span></div>
+</div>
+
+<!-- FINANCE — balance & fees left blank for manual entry; dates from admin term settings -->
+<div class="finance-section">
+  <div class="finance-row">
+    <div class="finance-item"><span class="finance-label">This term's balance:</span><span class="finance-val"></span></div>
+    <div class="finance-item"><span class="finance-label">Next term's fees:</span><span class="finance-val"></span></div>
+  </div>
+  <div class="finance-row">
+    <div class="finance-item"><span class="finance-label">This term ended on:</span><span class="finance-val">${getEndDate()}</span></div>
+    <div class="finance-item"><span class="finance-label">Next term begins on:</span><span class="finance-val">${getNextTermStart()}</span></div>
+  </div>
+</div>
+
+<div class="doc-footer">Hill View Primary School — Report Management System &nbsp;|&nbsp; ${new Date().getFullYear()}</div>
+</body></html>`);
+			w.document.close();
+		}
+
+		// ══════════════════════════════════════════════════
+		//  DOM HELPERS
+		// ══════════════════════════════════════════════════
+		function e(tag, attrs, ...kids) {
+			const el = document.createElement(tag);
+			for (const [k, v] of Object.entries(attrs || {})) {
+				if (k === 'class') el.className = v;
+				else if (k === 'style') el.style.cssText = v;
+				else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+				else el.setAttribute(k, v);
+			}
+			kids.flat().forEach(c => {if (c != null) el.append(typeof c === 'string' ? c : c);});
+			return el;
+		}
+		const d = (cls, st, ...ch) => e('div', {class: cls || '', style: st || ''}, ...ch);
+		const mkSB = v => {const s = e('span', {class: `sb ${scoreClass(v)}`}); s.textContent = v; return s;};
+		const mkPosB = p => {const s = e('span', {class: `pb ${p === 1 ? 'pb-1' : p <= 3 ? 'pb-2' : 'pb-n'}`}); s.textContent = `#${p}`; return s;};
+
+		// ══════════════════════════════════════════════════
+		//  MARKS TABLE COMPONENT (Excel-style)
+		// ══════════════════════════════════════════════════
+		function MarksTable(classId, readOnly) {
+			const subs = classSubs(classId);
+			const ranked = rankPupils(classId);
+			const cls = S.classes.find(c => c.id === classId);
+			const p7 = cls && isP7Class(cls.name);
+			const isTeacher = S.user.role === 'teacher';
+
+			if (!subs.length && !ranked.length) {
+				const msg = d('empty');
+				msg.textContent = 'No pupils or subjects configured for this class.';
+				return msg;
+			}
+			if (!subs.length) {const msg = d('empty'); msg.textContent = 'No subjects configured for this level.'; return msg;}
+
+			const wrap = d('excel-wrap');
+			const tbl = document.createElement('table');
+			tbl.className = 'excel-table';
+
+			// thead
+			const thead = document.createElement('thead'), hr = document.createElement('tr');
+			const thN = e('th', {class: 'sticky-col'}); thN.textContent = 'Pupil'; thN.style.minWidth = '140px'; hr.appendChild(thN);
+			subs.forEach(s => {
+				const th = document.createElement('th');
+				th.textContent = s.name.length > 14 ? s.name.slice(0, 12) + '…' : s.name;
+				th.title = s.name; th.style.textAlign = 'center'; hr.appendChild(th);
+			});
+			['Avg', 'Pos', ...(p7 ? ['Grade'] : []), ''].forEach(h => {
+				const th = document.createElement('th'); th.textContent = h; th.style.textAlign = 'center'; hr.appendChild(th);
+			});
+			thead.appendChild(hr); tbl.appendChild(thead);
+
+			// tbody
+			const tbody = document.createElement('tbody');
+			if (!ranked.length) {
+				const emptyTr = document.createElement('tr');
+				const emptyTd = e('td', {colspan: String(subs.length + 4 + (p7 ? 1 : 0)), style: 'text-align:center;color:var(--muted);padding:18px'});
+				emptyTd.textContent = 'No pupils yet. Add the first pupil below.';
+				emptyTr.appendChild(emptyTd); tbody.appendChild(emptyTr);
+			}
+			ranked.forEach(p => {
+				const tr = document.createElement('tr');
+				const tdN = e('td', {class: 'sticky-col'}); tdN.textContent = p.name; tr.appendChild(tdN);
+
+				subs.forEach(s => {
+					const td = e('td', {style: 'text-align:center'});
+					const val = getScore(p.id, s.id);
+					if (readOnly) {td.appendChild(mkSB(val));}
+					else {
+						const hasPending = S.pending[markKey(p.id, s.id)] !== undefined;
+						const inp = e('input', {type: 'number', min: '0', max: '100', step: '1', value: val, class: 'inline-num', style: hasPending ? 'border-color:var(--warn);background:#fffbf0' : ''});
+						inp.addEventListener('input', ev => {
+							setPending(p.id, s.id, ev.target.value);
+							inp.style.borderColor = 'var(--warn)'; inp.style.background = '#fffbf0';
+						});
+						td.appendChild(inp);
+					}
+					tr.appendChild(td);
+				});
+
+				// avg
+				const tdA = e('td', {style: 'text-align:center'});
+				const avgEl = e('strong', {id: `avg-${p.id}`, style: 'color:var(--g)'}); avgEl.textContent = p.avg.toFixed(1); tdA.appendChild(avgEl); tr.appendChild(tdA);
+				// pos
+				const tdP = e('td', {id: `pos-${p.id}`, style: 'text-align:center'}); tdP.appendChild(mkPosB(p.pos)); tr.appendChild(tdP);
+				// P7 grade
+				if (p7) {
+					const tdG = e('td', {id: `grade-${p.id}`, style: 'text-align:center'});
+					const pd = pleCalc(p.id, classId);
+					const gs = e('span', {class: 'grade-b', style: gradeStyle(pd.grade)}); gs.textContent = pd.grade; tdG.appendChild(gs); tr.appendChild(tdG);
+				}
+				// print btn
+				const tdB = e('td', {style: 'text-align:center'});
+				const btn = e('button', {class: 'btn btn-ghost btn-sm'}); btn.textContent = 'Print';
+				btn.addEventListener('click', () => {
+					const sum = {
+						pupil_name: p.name, class_name: cls?.name || '',
+						total_score: p.total, average_score: p.avg,
+						position: p.pos, uneb_grade: p7 ? pleCalc(p.id, classId).grade : null
+					};
+					const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
+					printReport(sum, subjs);
+				}); tdB.appendChild(btn); tr.appendChild(tdB);
+				tbody.appendChild(tr);
+			});
+
+			// Add-pupil row — shown for teachers (not read-only) AND for admin in marks view
+			if (!readOnly) {
+				const addTr = document.createElement('tr');
+				addTr.className = 'add-pupil-row';
+				const addTd = e('td', {colspan: String(subs.length + 4 + (p7 ? 1 : 0))});
+				const form = d('inline-form', 'margin:2px 0');
+				const nameIn = e('input', {type: 'text', placeholder: '+ Type pupil name and click Add…', style: 'max-width:280px'});
+				const addBtn = e('button', {class: 'btn btn-primary btn-sm', type: 'button'}); addBtn.textContent = 'Add Pupil';
+				const doAdd = async () => {
+					const nm = nameIn.value.trim(); if (!nm) return;
+					addBtn.disabled = true; addBtn.textContent = 'Adding…';
+					const err = await addPupil(nm, classId);
+					if (err) {addBtn.disabled = false; addBtn.textContent = 'Add Pupil'; alert('Error: ' + err);}
+				};
+				nameIn.addEventListener('keydown', ev => {if (ev.key === 'Enter') doAdd();});
+				addBtn.addEventListener('click', doAdd);
+				form.appendChild(nameIn); form.appendChild(addBtn); addTd.appendChild(form); addTr.appendChild(addTd);
+				tbody.appendChild(addTr);
+			}
+
+			tbl.appendChild(tbody); wrap.appendChild(tbl);
+			return wrap;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: ADMIN OVERVIEW
+		// ══════════════════════════════════════════════════
+		function ViewOverview() {
+			const c = d('content');
+			const h = e('h2', {class: 'page-h'}); h.textContent = 'School Overview'; c.appendChild(h);
+
+			// Metrics
+			const teachers = S.submissions.length;
+			const mg = d('mc-grid');
+			[{val: S.pupils.length, lbl: 'Total Pupils'}, {val: S.classes.length, lbl: 'Classes'}, {val: S.classPerf.length ? Number(S.classPerf.reduce((a, r) => a + parseFloat(r.average_score || 0), 0) / S.classPerf.length).toFixed(1) + '%' : '–', lbl: 'School Average'}, {val: S.submissions.length, lbl: 'Teacher Submissions'}]
+				.forEach(({val, lbl}) => {
+					const mc = d('mc');
+					const mv = e('div', {class: 'mc-val'}); mv.textContent = val; mc.appendChild(mv);
+					const ml = e('div', {class: 'mc-lbl'}); ml.textContent = lbl; mc.appendChild(ml); mg.appendChild(mc);
+				}); c.appendChild(mg);
+
+			// Two-col: chart + top pupils
+			const tc = d('two-col');
+
+			const cc = d('card');
+			const ch = e('h3', {class: 'section-h'}); ch.textContent = 'Class averages'; cc.appendChild(ch);
+			const cw = d('', 'position:relative;height:220px');
+			const canvas = e('canvas', {id: 'cls-chart', role: 'img', 'aria-label': 'Bar chart of class averages'}); cw.appendChild(canvas); cc.appendChild(cw); tc.appendChild(cc);
+
+			const topCard = d('card');
+			const th3 = e('h3', {class: 'section-h'}); th3.textContent = 'Top performer per class'; topCard.appendChild(th3);
+			S.classPerf.slice(0, 6).forEach(row => {
+				const r = d('', 'display:flex;align-items:center;gap:10px;margin-bottom:9px');
+				const cn = e('span', {class: 'pill', style: 'min-width:80px;text-align:center'}); cn.textContent = row.class_name; r.appendChild(cn);
+				const nm = e('div', {style: 'flex:1;font-size:13px;font-weight:500'}); nm.textContent = row.best_pupil || '–'; r.appendChild(nm);
+				const av = e('span', {style: 'font-size:12px;font-weight:600;color:var(--g)'}); av.textContent = parseFloat(row.average_score || 0).toFixed(1) + '%'; r.appendChild(av);
+				topCard.appendChild(r);
+			}); tc.appendChild(topCard); c.appendChild(tc);
+
+			// Submission status table
+			const subCard = d('card');
+			const sh = e('h3', {class: 'section-h'}); sh.textContent = 'Teacher submission status'; subCard.appendChild(sh);
+			if (S.submissions.length) {
+				const wrap = d('tbl-wrap');
+				const tbl = document.createElement('table');
+				const thead = document.createElement('thead'), hr = document.createElement('tr');
+				['Teacher', 'Class', 'Subjects Entered', 'Progress'].forEach(h2 => {const th = document.createElement('th'); th.textContent = h2; hr.appendChild(th);});
+				thead.appendChild(hr); tbl.appendChild(thead);
+				const tbody = document.createElement('tbody');
+				S.submissions.forEach(row => {
+					const tr = document.createElement('tr');
+					const pct = row.subject_count > 0 ? Math.round((row.subjects_entered / row.subject_count) * 100) : 0;
+					[row.teacher_name, row.class_name, `${row.subjects_entered}/${row.subject_count}`].forEach(txt => {
+						const td = document.createElement('td'); td.textContent = txt; tr.appendChild(td);
+					});
+					const tdP = document.createElement('td');
+					const bar = d('sub-bar'); const fill = d('sub-fill'); fill.style.width = pct + '%'; bar.appendChild(fill);
+					const pctTxt = e('div', {style: 'font-size:11px;color:var(--muted);margin-top:2px'}); pctTxt.textContent = pct + '%'; tdP.appendChild(bar); tdP.appendChild(pctTxt);
+					tr.appendChild(tdP); tbody.appendChild(tr);
+				});
+				tbl.appendChild(tbody); wrap.appendChild(tbl); subCard.appendChild(wrap);
+			} else {
+				const msg = d('empty'); msg.textContent = 'No submission data yet.'; subCard.appendChild(msg);
+			}
+			c.appendChild(subCard);
+
+			// Draw chart after paint
+			requestAnimationFrame(() => setTimeout(() => {
+				if (S.chartInst) {S.chartInst.destroy(); S.chartInst = null;}
+				const ctx = document.getElementById('cls-chart'); if (!ctx) return;
+				S.chartInst = new Chart(ctx, {
+					type: 'bar',
+					data: {
+						labels: S.classPerf.map(r => r.class_name),
+						datasets: [{label: 'Average', data: S.classPerf.map(r => parseFloat(r.average_score || 0)), backgroundColor: 'rgba(26,107,60,.72)', borderColor: '#1a6b3c', borderWidth: 1}]
+					},
+					options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {min: 0, max: 100, ticks: {color: '#6b7b6b'}, grid: {color: 'rgba(0,0,0,.05)'}}, x: {ticks: {color: '#6b7b6b', maxRotation: 45}, grid: {display: false}}}}
+				});
+			}, 60));
+			return c;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: CLASS MARKS (admin + teacher)
+		// ══════════════════════════════════════════════════
+		function ViewMarks() {
+			const isAdmin = S.user.role === 'admin';
+			const classId = isAdmin ? (S.selClass || S.classes[0]?.id) : S.user.class_id;
+			const cls = S.classes.find(c => c.id === classId);
+			const hasPending = Object.keys(S.pending).length > 0;
+
+			const c = d('content');
+			const hdr = d('hdr-row');
+			const h = e('h2', {class: 'page-h', style: 'margin-bottom:0'}); h.textContent = isAdmin ? 'Class Marks' : `${cls?.name || ''} — Marks`; hdr.appendChild(h);
+
+			if (isAdmin) {
+				const sel = e('select', {style: 'width:auto'});
+				S.classes.forEach(cl => {const o = e('option', {value: cl.id}); o.textContent = cl.name; if (cl.id === classId) o.selected = true; sel.appendChild(o);});
+				sel.addEventListener('change', ev => {S.selClass = ev.target.value; S.pending = {}; render();});
+				hdr.appendChild(sel);
+			}
+
+			const pills = d('', 'display:flex;gap:7px;flex-wrap:wrap');
+			if (cls) {const p = e('span', {class: 'pill'}); p.textContent = resolveLevel(cls.name).toUpperCase(); pills.appendChild(p);}
+			const pc = e('span', {class: 'pill pill-grey'}); pc.textContent = `${S.pupils.filter(p => p.class_id === classId).length} pupils`; pills.appendChild(pc);
+			const sc = e('span', {class: 'pill pill-grey'}); sc.textContent = `${classSubs(classId).length} subjects`; pills.appendChild(sc);
+			if (hasPending) {const ch = e('span', {class: 'pill', style: 'background:#fff3cd;color:#7a5300'}); ch.innerHTML = `${Object.keys(S.pending).length} unsaved change${Object.keys(S.pending).length > 1 ? 's' : ''}`; pills.appendChild(ch);}
+			hdr.appendChild(pills); c.appendChild(hdr);
+
+			// Save actions
+			const acts = d('marks-actions');
+			const saveBtn = e('button', {class: 'btn btn-primary', onclick: saveMarks});
+			saveBtn.disabled = S.saving || !hasPending;
+			saveBtn.innerHTML = S.saving ? '<span class="spin"></span> Saving…' : 'Save Marks';
+			acts.appendChild(saveBtn);
+			if (S.saveMsg) {
+				const msg = e('span', {class: S.saveMsg.startsWith('Error') ? 'msg-err' : 'msg-ok'}); msg.textContent = S.saveMsg; acts.appendChild(msg);
+			}
+			c.appendChild(acts);
+
+			const card = d('card'); card.appendChild(MarksTable(classId, false)); c.appendChild(card);
+			return c;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: TEACHER SUMMARY
+		// ══════════════════════════════════════════════════
+		function ViewSummary() {
+			const classId = S.user.class_id;
+			const cls = S.classes.find(c => c.id === classId);
+			const ranked = rankPupils(classId);
+			const clsAvg = ranked.length ? (ranked.reduce((a, p) => a + p.avg, 0) / ranked.length).toFixed(1) : '–';
+
+			const c = d('content');
+			const h = e('h2', {class: 'page-h'}); h.textContent = `${cls?.name || ''} — Summary`; c.appendChild(h);
+			const mg = d('mc-grid', 'grid-template-columns:repeat(3,minmax(0,1fr))');
+			[{val: S.pupils.filter(p => p.class_id === classId).length, lbl: 'Pupils'}, {val: clsAvg + '%', lbl: 'Class average'}, {val: ranked[0] ? ranked[0].avg.toFixed(1) + '%' : '–', lbl: 'Top score'}]
+				.forEach(({val, lbl}) => {const mc = d('mc'); const mv = e('div', {class: 'mc-val'}); mv.textContent = val; mc.appendChild(mv); const ml = e('div', {class: 'mc-lbl'}); ml.textContent = lbl; mc.appendChild(ml); mg.appendChild(mc);});
+			c.appendChild(mg);
+			const card = d('card'); const sh = e('h3', {class: 'section-h'}); sh.textContent = 'Rankings'; card.appendChild(sh);
+			card.appendChild(MarksTable(classId, true)); c.appendChild(card);
+			return c;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: ADMIN ALL CLASSES
+		// ══════════════════════════════════════════════════
+		function ViewAllClasses() {
+			const c = d('content');
+			const h = e('h2', {class: 'page-h'}); h.textContent = 'All Classes'; c.appendChild(h);
+			const grid = d('', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px');
+			S.classes.forEach(cls => {
+				const pups = S.pupils.filter(p => p.class_id === cls.id);
+				const subs = classSubs(cls.id);
+				const perf = S.classPerf.find(r => r.class_id === cls.id);
+				const card = d('card');
+				const top = d('', 'display:flex;align-items:center;gap:12px;margin-bottom:12px');
+				const av = e('div', {style: 'width:38px;height:38px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--g);flex-shrink:0'}); av.textContent = cls.name.slice(0, 2); top.appendChild(av);
+				const inf = d(''); const nm = e('div', {style: 'font-size:14px;font-weight:700'}); nm.textContent = cls.name; inf.appendChild(nm);
+				const lv = e('div', {style: 'font-size:12px;color:var(--muted)'}); lv.textContent = resolveLevel(cls.name); inf.appendChild(lv); top.appendChild(inf); card.appendChild(top);
+				const pills = d('', 'display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px');
+				const p1 = e('span', {class: 'pill'}); p1.textContent = `${pups.length} pupils`; pills.appendChild(p1);
+				const p2 = e('span', {class: 'pill pill-grey'}); p2.textContent = `${subs.length} subjects`; pills.appendChild(p2);
+				if (perf) {const p3 = e('span', {class: 'pill pill-grey'}); p3.textContent = `Avg ${parseFloat(perf.average_score || 0).toFixed(1)}%`; pills.appendChild(p3);}
+				card.appendChild(pills);
+				const btn = e('button', {class: 'btn btn-ghost btn-sm'}); btn.textContent = 'Edit marks →';
+				btn.addEventListener('click', () => {S.selClass = cls.id; S.view = 'marks'; render();});
+				card.appendChild(btn); grid.appendChild(card);
+			}); c.appendChild(grid);
+			return c;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  BULK REPORT GENERATION
+		// ══════════════════════════════════════════════════
+		function showProgressOverlay(label, current, total) {
+			let ov = document.getElementById('progress-overlay');
+			if (!ov) {
+				ov = d('progress-overlay'); ov.id = 'progress-overlay';
+				const box = d('progress-box');
+				const h3 = e('h3'); h3.id = 'prog-label'; box.appendChild(h3);
+				const barWrap = d('progress-bar-wrap'); const fill = d('progress-bar-fill'); fill.id = 'prog-fill'; barWrap.appendChild(fill); box.appendChild(barWrap);
+				const pct = e('div', {style: 'font-size:12px;color:var(--muted);margin-top:4px'}); pct.id = 'prog-pct'; box.appendChild(pct);
+				const cancelBtn = e('button', {class: 'btn btn-ghost btn-sm', style: 'margin-top:14px'}); cancelBtn.textContent = 'Cancel'; cancelBtn.id = 'prog-cancel';
+				cancelBtn.addEventListener('click', () => {S._bulkCancel = true; removeProgressOverlay();});
+				box.appendChild(cancelBtn); ov.appendChild(box); document.body.appendChild(ov);
+			}
+			document.getElementById('prog-label').textContent = label;
+			const pct2 = total > 0 ? Math.round((current / total) * 100) : 0;
+			document.getElementById('prog-fill').style.width = pct2 + '%';
+			document.getElementById('prog-pct').textContent = `${current} / ${total} (${pct2}%)`;
+		}
+		function removeProgressOverlay() {const ov = document.getElementById('progress-overlay'); if (ov) ov.remove();}
+
+		async function generateReportsForClass(classId) {
+			const cls = S.classes.find(c => c.id === classId); if (!cls) return;
+			const subs = classSubs(classId);
+			const ranked = rankPupils(classId);
+			const p7 = isP7Class(cls.name);
+			S._bulkCancel = false;
+			for (let i = 0; i < ranked.length; i++) {
+				if (S._bulkCancel) break;
+				const p = ranked[i];
+				showProgressOverlay(`Printing ${cls.name} reports…`, i + 1, ranked.length);
+				await new Promise(res => setTimeout(res, 120));
+				const sum = {pupil_name: p.name, class_name: cls.name, total_score: p.total, average_score: p.avg, position: p.pos, uneb_grade: p7 ? pleCalc(p.id, classId).grade : null};
+				const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
+				printReport(sum, subjs);
+				await new Promise(res => setTimeout(res, 350));
+			}
+			removeProgressOverlay();
+		}
+
+		async function generateAllReports() {
+			S._bulkCancel = false;
+			const allPupils = [];
+			S.classes.forEach(cls => {
+				const subs = classSubs(cls.id);
+				const ranked = rankPupils(cls.id);
+				const p7 = isP7Class(cls.name);
+				ranked.forEach(p => allPupils.push({p, cls, subs, p7}));
+			});
+			for (let i = 0; i < allPupils.length; i++) {
+				if (S._bulkCancel) break;
+				const {p, cls, subs, p7} = allPupils[i];
+				showProgressOverlay(`Printing all reports (${cls.name})…`, i + 1, allPupils.length);
+				await new Promise(res => setTimeout(res, 120));
+				const sum = {pupil_name: p.name, class_name: cls.name, total_score: p.total, average_score: p.avg, position: p.pos, uneb_grade: p7 ? pleCalc(p.id, cls.id).grade : null};
+				const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
+				printReport(sum, subjs);
+				await new Promise(res => setTimeout(res, 350));
+			}
+			removeProgressOverlay();
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: ADMIN REPORTS (uses DB views)
+		// ══════════════════════════════════════════════════
+		function ViewReports() {
+			const c = d('content');
+			const h = e('h2', {class: 'page-h'}); h.textContent = 'Report Cards'; c.appendChild(h);
+
+			if (!S.reportPupils.length) {
+				const msg = d('empty'); msg.textContent = 'Loading pupils…'; c.appendChild(msg);
+				loadReportPupils(); return c;
+			}
+
+			// ── Bulk generate bar ──
+			const bar = d('bulk-bar');
+			const barLabel = e('strong'); barLabel.textContent = `${S.reportPupils.length} pupils across ${S.classes.length} classes`; bar.appendChild(barLabel);
+
+			// Per-class buttons
+			const clsWrap = d('', 'display:flex;gap:7px;flex-wrap:wrap;align-items:center');
+			const clsLbl = e('span', {style: 'font-size:12px;color:var(--muted);font-weight:600'}); clsLbl.textContent = 'Print by class:'; clsWrap.appendChild(clsLbl);
+			S.classes.forEach(cls => {
+				const pups = S.pupils.filter(p => p.class_id === cls.id);
+				if (!pups.length) return;
+				const cb = e('button', {class: 'btn btn-ghost btn-sm'});
+				cb.textContent = cls.name;
+				cb.addEventListener('click', () => generateReportsForClass(cls.id));
+				clsWrap.appendChild(cb);
+			});
+			bar.appendChild(clsWrap);
+
+			const allBtn = e('button', {class: 'btn btn-primary btn-sm'});
+			allBtn.innerHTML = '🖨 Print All Reports';
+			allBtn.addEventListener('click', generateAllReports);
+			bar.appendChild(allBtn);
+			c.appendChild(bar);
+
+			const layout = d('', 'display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:start');
+			layout.className = 'report-layout';
+			layout.style.cssText = 'display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:start';
+
+			// sidebar pupil list
+			const aside = d('', 'background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px;max-height:70vh;overflow-y:auto');
+			aside.className = 'report-aside';
+			const ah = e('h4', {style: 'font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px'}); ah.textContent = 'Pupils'; aside.appendChild(ah);
+			let lastCls = '';
+			S.reportPupils.forEach(p => {
+				if (p.class_name !== lastCls) {
+					const grp = e('div', {style: 'font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px;padding-left:4px'}); grp.textContent = p.class_name; aside.appendChild(grp); lastCls = p.class_name;
+				}
+				const itm = e('button', {class: 'nav-item' + (p.pupil_id === S.reportSelId ? ' active' : ''), style: 'padding:7px 12px;border-radius:var(--r);border-left:3px solid transparent'});
+				itm.textContent = p.pupil_name;
+				itm.addEventListener('click', async () => {S.reportSummary = null; S.reportSubjects = []; render(); await loadReportForPupil(p.pupil_id);});
+				aside.appendChild(itm);
+			}); layout.appendChild(aside);
+
+			// report card
+			const main = d('');
+			if (!S.reportSummary) {const ld = d('loader'); ld.innerHTML = `<div class="spin"></div>&ensp;Loading report…`; main.appendChild(ld);}
+			else {
+				const rc = d('report-card');
+				const topBtns = d('', 'display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap');
+				const printBtn = e('button', {class: 'btn btn-ghost btn-sm no-print'});
+				printBtn.innerHTML = '🖨 Print / PDF';
+				printBtn.addEventListener('click', () => printReport(S.reportSummary, S.reportSubjects));
+				topBtns.appendChild(printBtn);
+
+				// Print whole class from report view
+				if (S.reportSummary) {
+					const thisCls = S.classes.find(c => c.name === S.reportSummary.class_name);
+					if (thisCls) {
+						const clsPrintBtn = e('button', {class: 'btn btn-ghost btn-sm no-print'});
+						clsPrintBtn.textContent = `Print all ${S.reportSummary.class_name}`;
+						clsPrintBtn.addEventListener('click', () => generateReportsForClass(thisCls.id));
+						topBtns.appendChild(clsPrintBtn);
+					}
+				}
+				rc.appendChild(topBtns);
+
+				const rh = e('h1'); rh.textContent = 'Hill View Primary School'; rc.appendChild(rh);
+				const rs = e('div', {class: 'sub'}); rs.textContent = 'Academic Report Card | Term 2, 2025'; rc.appendChild(rs);
+				const meta = d('report-meta');
+				[{val: S.reportSummary.pupil_name, lbl: 'Pupil'}, {val: S.reportSummary.class_name, lbl: 'Class'}, {val: S.reportSummary.position ?? '–', lbl: 'Position'}]
+					.forEach(({val, lbl}) => {const div2 = document.createElement('div'); const sp = e('span'); sp.textContent = lbl; const st = e('strong'); st.textContent = val; div2.appendChild(sp); div2.appendChild(st); meta.appendChild(div2);});
+				rc.appendChild(meta);
+				const tbl = document.createElement('table');
+				const thead = document.createElement('thead'), hr = document.createElement('tr');
+				['Subject', 'Score', '/ 100', 'Remarks'].forEach(h2 => {const th = document.createElement('th'); th.textContent = h2; if (h2 !== 'Subject') th.style.textAlign = 'center'; hr.appendChild(th);});
+				thead.appendChild(hr); tbl.appendChild(thead);
+				const tbody = document.createElement('tbody');
+				S.reportSubjects.forEach(s => {
+					const tr = document.createElement('tr');
+					const cls2 = scoreClass(s.score);
+					const colorMap = {'sb-a': '#0a4f24', 'sb-b': '#0a3a6b', 'sb-c': '#7a5300', 'sb-f': '#c0392b'};
+					[s.subject_name, s.score, '100', scoreLabel(s.score)].forEach((txt, i) => {
+						const td = document.createElement('td'); td.textContent = txt;
+						if (i === 1 || i === 2) td.style.textAlign = 'center';
+						if (i === 1 || i === 3) td.style.color = colorMap[cls2];
+						if (i === 1) td.style.fontWeight = '700';
+						tr.appendChild(td);
+					}); tbody.appendChild(tr);
+				});
+				tbl.appendChild(tbody); rc.appendChild(tbl);
+				const smeta = d('report-meta', 'margin-top:16px');
+				[{val: S.reportSummary.total_score, lbl: 'Total'}, {val: parseFloat(S.reportSummary.average_score).toFixed(1) + '%', lbl: 'Average'}, {val: S.reportSummary.uneb_grade ?? 'N/A', lbl: 'UNEB Grade'}]
+					.forEach(({val, lbl}) => {const div2 = document.createElement('div'); const sp = e('span'); sp.textContent = lbl; const st = e('strong'); if (lbl === 'UNEB Grade' && S.reportSummary.uneb_grade) {st.style.cssText = gradeStyle(S.reportSummary.uneb_grade) + 'padding:4px 14px;border-radius:20px;';} st.textContent = val; div2.appendChild(sp); div2.appendChild(st); smeta.appendChild(div2);});
+				rc.appendChild(smeta);
+				main.appendChild(rc);
+			}
+			layout.appendChild(main); c.appendChild(layout);
+			return c;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  VIEW: ADMIN SETTINGS
+		// ══════════════════════════════════════════════════
+		function ViewSettings() {
+			const c = d('content');
+			const h = e('h2', {class: 'page-h'}); h.textContent = 'Term Settings'; c.appendChild(h);
+
+			const sub = e('p', {style: 'font-size:13px;color:var(--muted);margin-bottom:20px;max-width:480px'});
+			sub.textContent = 'These values are printed on every report card automatically. Set them once per term before generating reports.';
+			c.appendChild(sub);
+
+			const card = d('settings-card');
+
+			// ── Term label ──────────────────────────────────
+			const g1 = d('settings-group');
+			const l1 = e('label', {class: 'settings-label'}); l1.textContent = 'Current Term'; g1.appendChild(l1);
+			const i1 = e('input', {
+				type: 'text', class: 'settings-input',
+				placeholder: 'e.g.  Term 2, 2025',
+				value: S.termSettings.termLabel
+			});
+			i1.addEventListener('input', ev => {S.termSettings.termLabel = ev.target.value;});
+			const h1 = e('p', {class: 'settings-hint'}); h1.textContent = 'Appears on the report header and position row.';
+			g1.appendChild(i1); g1.appendChild(h1); card.appendChild(g1);
+
+			// ── End date ────────────────────────────────────
+			const g2 = d('settings-group');
+			const l2 = e('label', {class: 'settings-label'}); l2.textContent = 'Term End Date'; g2.appendChild(l2);
+			const i2 = e('input', {
+				type: 'date', class: 'settings-input',
+				value: S.termSettings.endDate
+			});
+			i2.addEventListener('input', ev => {S.termSettings.endDate = formatDate(ev.target.value);});
+			const h2 = e('p', {class: 'settings-hint'}); h2.textContent = 'Printed as "This term ended on:" at the bottom of every report.';
+			g2.appendChild(i2); g2.appendChild(h2); card.appendChild(g2);
+
+			// ── Next term start ─────────────────────────────
+			const g3 = d('settings-group');
+			const l3 = e('label', {class: 'settings-label'}); l3.textContent = 'Next Term Opening Date'; g3.appendChild(l3);
+			const i3 = e('input', {
+				type: 'date', class: 'settings-input',
+				value: S.termSettings.nextTermStart
+			});
+			i3.addEventListener('input', ev => {S.termSettings.nextTermStart = formatDate(ev.target.value);});
+			const h3 = e('p', {class: 'settings-hint'}); h3.textContent = 'Printed as "Next term begins on:" at the bottom of every report.';
+			g3.appendChild(i3); g3.appendChild(h3); card.appendChild(g3);
+
+			// ── Save button ─────────────────────────────────
+			const btnRow = d('', 'display:flex;align-items:center;margin-top:8px');
+			const saveBtn = e('button', {class: 'btn btn-primary'});
+			saveBtn.textContent = 'Save Settings';
+			saveBtn.addEventListener('click', async () => {
+				saveBtn.disabled = true;
+				saveBtn.innerHTML = '<span class="spin"></span>&ensp;Saving…';
+				await saveTermSettings();
+				saveBtn.disabled = false;
+				saveBtn.textContent = 'Save Settings';
+			});
+			btnRow.appendChild(saveBtn);
+			if (S.termSettings.settingsMsg === 'saved') {
+				const ok = e('span', {class: 'settings-saved'}); ok.textContent = '✓ Saved'; btnRow.appendChild(ok);
+			}
+			card.appendChild(btnRow);
+			c.appendChild(card);
+
+			// ── Preview panel ────────────────────────────────
+			const prev = d('settings-card', 'margin-top:20px;background:var(--gl)');
+			const ph = e('h3', {style: 'font-size:13px;font-weight:700;color:var(--g);margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em'});
+			ph.textContent = 'Preview — what will print on reports';
+			prev.appendChild(ph);
+			[
+				['Term label', getTermLabel() || '—'],
+				['This term ended on', getEndDate() || '—'],
+				['Next term begins on', getNextTermStart() || '—'],
+			].forEach(([label, val]) => {
+				const row = d('', 'display:flex;align-items:baseline;gap:10px;margin-bottom:8px;font-size:13px');
+				const lbl = e('span', {style: 'color:var(--muted);font-weight:600;min-width:180px'}); lbl.textContent = label + ':'; row.appendChild(lbl);
+				const vl = e('span', {style: 'font-weight:700;color:var(--text)'}); vl.textContent = val; row.appendChild(vl);
+				prev.appendChild(row);
+			});
+			c.appendChild(prev);
+
+			return c;
+		}
+
+		// Format date from <input type=date> (YYYY-MM-DD) → readable (e.g. 15th August 2025)
+		function formatDate(iso) {
+			if (!iso) return '';
+			const [y, m, d2] = iso.split('-').map(Number);
+			const months = ['January', 'February', 'March', 'April', 'May', 'June',
+				'July', 'August', 'September', 'October', 'November', 'December'];
+			const suffix = d2 === 1 || d2 === 21 || d2 === 31 ? 'st' : d2 === 2 || d2 === 22 ? 'nd' : d2 === 3 || d2 === 23 ? 'rd' : 'th';
+			return `${d2}${suffix} ${months[m - 1]} ${y}`;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  LOGIN SCREEN
+		// ══════════════════════════════════════════════════
+		function renderLogin(errMsg) {
+			const root = document.getElementById('app'); root.innerHTML = '';
+			const wrap = d('login-wrap');
+			const card = d('login-card');
+
+			const lw = d('login-logo');
+			lw.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
+			card.appendChild(lw);
+			const h1 = e('h1', {class: 'login-h1'}); h1.textContent = 'Hill View Primary School'; card.appendChild(h1);
+			const sub = e('p', {class: 'login-sub'}); sub.textContent = 'Report Management System'; card.appendChild(sub);
+			if (errMsg) {const eb = d('err-box'); eb.textContent = errMsg; card.appendChild(eb);}
+
+			const ef = d('field'); const el2 = e('label'); el2.textContent = 'Email'; ef.appendChild(el2);
+			const ei = e('input', {type: 'email', id: 'lemail', placeholder: 'your@email.com', autocomplete: 'email'}); ef.appendChild(ei); card.appendChild(ef);
+			const pf = d('field'); const pl = e('label'); pl.textContent = 'Password'; pf.appendChild(pl);
+			const pi = e('input', {type: 'password', id: 'lpw', placeholder: '••••••••', autocomplete: 'current-password'}); pf.appendChild(pi); card.appendChild(pf);
+
+			const btn = e('button', {class: 'btn btn-primary', style: 'width:100%;justify-content:center;margin-top:4px'}); btn.textContent = 'Sign in'; card.appendChild(btn);
+			const doSI = async () => {
+				btn.disabled = true; btn.innerHTML = '<span class="spin"></span>&ensp;Signing in…';
+				const err = await signIn(ei.value.trim(), pi.value);
+				if (err) {btn.disabled = false; btn.textContent = 'Sign in'; renderLogin(err);}
+			};
+			btn.addEventListener('click', doSI);
+			pi.addEventListener('keydown', ev => {if (ev.key === 'Enter') doSI();});
+
+			wrap.appendChild(card); root.appendChild(wrap); ei.focus();
+		}
+
+		// ══════════════════════════════════════════════════
+		//  NAVBAR + SIDEBAR
+		// ══════════════════════════════════════════════════
+		function renderNavbar() {
+			const nav = e('nav', {class: 'navbar'});
+			nav.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
+			const t = e('span', {class: 'nav-brand'}); t.textContent = 'Hill View Primary School'; nav.appendChild(t);
+			const u = e('span', {class: 'nav-user'}); u.textContent = S.user.name; nav.appendChild(u);
+			const r = e('span', {class: 'badge-role'}); r.textContent = S.user.role; nav.appendChild(r);
+			const lo = e('button', {class: 'btn-signout', onclick: signOut}); lo.textContent = 'Sign out'; nav.appendChild(lo);
+			return nav;
+		}
+
+		// ══════════════════════════════════════════════════
+		//  MAIN RENDER
+		// ══════════════════════════════════════════════════
+		function render() {
+			const root = document.getElementById('app'); root.innerHTML = '';
+			if (!S.user) {renderLogin(); return;}
+			if (S.loading) {
+				const app = d('', 'display:flex;flex-direction:column;min-height:100vh');
+				app.appendChild(renderNavbar());
+				const ld = d('loader'); ld.innerHTML = `<div class="spin"></div>&ensp;Loading…`; app.appendChild(ld);
+				root.appendChild(app); return;
+			}
+
+			const app = d('', 'display:flex;flex-direction:column;min-height:100vh');
+			app.appendChild(renderNavbar());
+			const ml = d('main');
+			const isAdmin = S.user.role === 'admin';
+
+			let navItems, contentEl;
+			if (isAdmin) {
+				navItems = [
+					{id: 'overview', label: 'Overview', icon: '<rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/>'},
+					{id: 'marks', label: 'Class Marks', icon: '<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+					{id: 'classes', label: 'All Classes', icon: '<rect x="1" y="3" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 14v2M11 14v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+					{id: 'reports', label: 'Reports', icon: '<path d="M3 2h10l3 3v13H3V2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+					{id: 'settings', label: 'Settings', icon: '<circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M11.5 3.1l-1.4 1.4M3.1 11.5l1.4 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'},
+				];
+				if (S.view === 'overview') contentEl = ViewOverview();
+				else if (S.view === 'marks') contentEl = ViewMarks();
+				else if (S.view === 'classes') contentEl = ViewAllClasses();
+				else if (S.view === 'settings') contentEl = ViewSettings();
+				else contentEl = ViewReports();
+			} else {
+				navItems = [
+					{id: 'marks', label: 'Enter Marks', icon: '<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+					{id: 'summary', label: 'Summary', icon: '<path d="M2 12l5-5 4 4 5-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'},
+				];
+				contentEl = S.view === 'summary' ? ViewSummary() : ViewMarks();
+			}
+
+			const sb = e('aside', {class: 'sidebar'});
+			navItems.forEach(({id, label, icon}) => {
+				const btn = e('button', {class: 'nav-item' + (S.view === id ? ' active' : '')});
+				btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 16 16" fill="none">${icon}</svg><span>${label}</span>`;
+				btn.addEventListener('click', () => {
+					if (id === 'reports' && !S.reportPupils.length) {S.view = id; S.reportSummary = null; render(); loadReportPupils();}
+					else {S.view = id; render();}
+				}); sb.appendChild(btn);
+			});
+
+			ml.appendChild(sb); ml.appendChild(contentEl); app.appendChild(ml); root.appendChild(app);
+		}
+
+		// ══════════════════════════════════════════════════
+		//  BOOT
+		// ══════════════════════════════════════════════════
+		(async function boot() {
+			const {data: {session}} = await db.auth.getSession();
+			if (session) {
+				// 'users' table — not 'profiles' — matches actual hill-view-ps schema
+				const {data: u} = await db.from('users').select('id,name,email,role,class_id').eq('id', session.user.id).single();
+				if (u) {S.user = u; S.view = u.role === 'admin' ? 'overview' : 'marks'; await loadAll(); return;}
+			}
+			S.loading = false; render();
+			db.auth.onAuthStateChange(ev => {
+				if (ev === 'SIGNED_OUT') {Object.assign(S, {user: null, loading: false, classes: [], subjects: [], pupils: [], marksMap: {}, classPerf: [], submissions: [], selClass: null, pending: {}, reportPupils: [], reportSelId: null, reportSummary: null, reportSubjects: []}); render();}
+			});
+		})();
+	</script>
+</body>
+
 </html>
