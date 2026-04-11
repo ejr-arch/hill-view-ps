@@ -7,6 +7,7 @@
 	<title>Hill View Primary School — Reports</title>
 	<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+	<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -17,8 +18,8 @@
 		// ══════════════════════════════════════════════════
 		//  CONFIG — matches hill-view-ps Supabase project
 		// ══════════════════════════════════════════════════
-		const SUPA_URL = 'https://gtguutliwmhntuigcqta.supabase.co';
-		const SUPA_KEY = 'sb_publishable_32CnYot-3Kn2ysRljL9-zQ_G5r_QqLI';
+		const SUPA_URL = NEXT_PUBLIC_SUPABASE_URL;
+		const SUPA_KEY = NEXT_PUBLIC_SUPABASE_ANON_KEY;
 		const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 		// ══════════════════════════════════════════════════
