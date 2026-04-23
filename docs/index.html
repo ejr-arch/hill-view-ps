@@ -1,1440 +1,1225 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Hill View Primary School — Reports</title>
-	<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-	<link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hill View Primary School — Reports</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#1a6b3c;--gl:#e8f5ee;--gm:#0f4a2a;--gx:#c8f0d8;
+  --bg:#f3f5f3;--surface:#fff;--border:#dde6dd;
+  --text:#1a1f1a;--muted:#6b7b6b;--danger:#c0392b;--warn:#f39c12;
+  --r:8px;--rl:12px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100vh}
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;min-height:100vh}
+.navbar{background:var(--g);color:#fff;display:flex;align-items:center;gap:12px;padding:0 20px;height:52px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.nav-brand{font-weight:700;font-size:15px;flex:1;letter-spacing:-.01em}
+.nav-user{font-size:12px;opacity:.9}
+.badge-role{font-size:11px;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.btn-signout{background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 14px;border-radius:var(--r);cursor:pointer;font-size:12px;transition:background .2s}
+.btn-signout:hover{background:rgba(255,255,255,.28)}
+.main{display:flex;flex:1;min-height:0}
+.sidebar{width:196px;background:var(--surface);border-right:1px solid var(--border);padding:10px 0;flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;padding:10px 18px;border:none;border-left:3px solid transparent;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;text-align:left;transition:all .15s}
+.nav-item:hover{background:var(--gl);color:var(--g)}
+.nav-item.active{border-left-color:var(--g);background:var(--gl);color:var(--g);font-weight:600}
+.content{flex:1;overflow-y:auto;padding:24px}
+/* ── INPUTS ── */
+input,select,textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:14px;color:var(--text);background:var(--surface);outline:none;transition:border .15s;font-family:inherit}
+input:focus,select:focus{border-color:var(--g);box-shadow:0 0 0 3px rgba(26,107,60,.1)}
+input[type=number]{width:62px;text-align:center;padding:4px 5px;font-size:13px}
+input.inline-num{width:62px;text-align:center;padding:4px 5px;font-size:13px}
+/* ── BUTTONS ── */
+.btn{padding:8px 18px;border-radius:var(--r);border:none;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--g);color:#fff}.btn-primary:hover{background:var(--gm)}.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:transparent;border:1px solid var(--g);color:var(--g)}.btn-ghost:hover{background:var(--gl)}
+.btn-danger{background:transparent;border:1px solid var(--danger);color:var(--danger)}.btn-danger:hover{background:#fde0e0}
+.btn-sm{padding:4px 12px;font-size:12px}
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:20px}
+.mc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.mc{background:var(--gl);border-radius:var(--r);padding:16px;text-align:center}
+.mc-val{font-size:26px;font-weight:700;color:var(--g)}
+.mc-lbl{font-size:12px;color:var(--muted);margin-top:3px}
+/* ── TABLES ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{padding:8px 10px;background:var(--bg);font-weight:600;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12px}
+tbody td{padding:7px 10px;border-bottom:1px solid #f0f4f0;vertical-align:middle}
+tbody tr:hover td{background:#fafcfa}
+.sticky-col{position:sticky;left:0;background:var(--surface);z-index:1;font-weight:500}
+thead .sticky-col{background:var(--bg)}
+/* ── SCORE BADGES ── */
+.sb{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:500}
+.sb-a{background:#d1f0dc;color:#0a4f24}.sb-b{background:#d0e8ff;color:#0a3a6b}
+.sb-c{background:#fff3cd;color:#7a5300}.sb-f{background:#fde0e0;color:#7a1111}
+.pb{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700}
+.pb-1{background:#fff0a0;color:#7a5300}.pb-2{background:#f0f0f0;color:#555}.pb-n{background:#f0f0f0;color:var(--muted)}
+.grade-b{display:inline-block;padding:3px 14px;border-radius:20px;font-size:13px;font-weight:700}
+/* ── LOGIN ── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:32px;width:380px}
+.login-logo{width:54px;height:54px;background:var(--g);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.login-h1{font-size:20px;font-weight:700;text-align:center;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+.err-box{font-size:12px;color:var(--danger);padding:9px 12px;background:#fde0e0;border-radius:var(--r);margin-bottom:12px;white-space:pre-line;line-height:1.6}
+
+/* ── MISC ── */
+.page-h{font-size:20px;font-weight:700;color:var(--g);margin-bottom:20px}
+.section-h{font-size:15px;font-weight:600;color:var(--muted);margin-bottom:14px}
+.pill{font-size:12px;background:var(--gl);color:var(--g);padding:3px 12px;border-radius:20px;font-weight:600;display:inline-block}
+.pill-grey{background:#f0f0f0;color:var(--muted)}
+.hdr-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.save-toast{position:fixed;bottom:24px;right:24px;background:var(--g);color:#fff;padding:10px 20px;border-radius:var(--r);font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
+.save-toast.show{opacity:1}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--g);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loader{display:flex;align-items:center;justify-content:center;flex:1;gap:12px;color:var(--muted);padding:60px}
+.two-col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+.empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.msg-ok{font-size:12px;color:#0a4f24;background:#d1f0dc;padding:7px 12px;border-radius:var(--r)}
+.msg-err{font-size:12px;color:var(--danger);background:#fde0e0;padding:7px 12px;border-radius:var(--r)}
+.inline-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inline-form input{flex:1;min-width:180px}
+.marks-actions{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.changed-dot{width:7px;height:7px;border-radius:50%;background:var(--warn);display:inline-block;margin-left:4px;vertical-align:middle}
+/* report print */
+@media print{
+  .no-print{display:none!important}
+  .sidebar,.navbar{display:none!important}
+  .content{padding:0}
+  .report-card{max-width:none}
+}
+/* Submission status */
+.sub-bar{height:8px;border-radius:20px;background:#e8e8e8;overflow:hidden;margin-top:4px}
+.sub-fill{height:100%;border-radius:20px;background:var(--g);transition:width .4s}
+/* Report card (in-page) */
+.report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:28px;max-width:760px}
+.report-card h1{font-size:22px;font-weight:700;text-align:center;color:var(--g);margin-bottom:4px}
+.report-card .sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:20px}
+.report-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px;background:var(--gl);border-radius:var(--r);margin-bottom:18px}
+.report-meta div{font-size:13px}
+.report-meta strong{display:block;font-size:18px;font-weight:700;color:var(--g)}
+.report-meta span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+/* ── EXCEL TABLE ── */
+.excel-wrap{overflow-x:auto;border:1px solid #c8d8c8;border-radius:var(--r)}
+.excel-tbl{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
+.excel-tbl thead th{padding:7px 10px;background:#e8f0e8;font-weight:600;color:#2d4a2d;text-align:center;border-right:1px solid #c8d8c8;border-bottom:2px solid #9fbe9f;white-space:nowrap;font-size:12px;position:sticky;top:0;z-index:2}
+.excel-tbl thead th.name-col{text-align:left;position:sticky;left:0;z-index:3;background:#d8ead8;min-width:160px}
+.excel-tbl tbody td{padding:0;border-right:1px solid #dde8dd;border-bottom:1px solid #dde8dd;vertical-align:middle}
+.excel-tbl tbody td.name-col{padding:6px 10px;font-weight:500;position:sticky;left:0;background:#f5faf5;z-index:1;border-right:2px solid #9fbe9f;white-space:nowrap}
+.excel-tbl tbody tr:hover td{background:#f0f8f0}.excel-tbl tbody tr:hover td.name-col{background:#eaf4ea}
+.excel-tbl tbody td.stat-col{padding:6px 8px;text-align:center;background:#f5faf5;border-right:1px solid #c8d8c8;font-weight:600;font-size:13px;white-space:nowrap}
+.excel-tbl tbody td.act-col{padding:4px 8px;text-align:center;background:#f5faf5;border-right:none;white-space:nowrap}
+.xcel-inp{width:58px;border:none;border-radius:0;padding:5px 4px;text-align:center;font-size:13px;background:transparent;color:var(--text);outline:none;display:block;margin:0 auto}
+.xcel-inp:focus{background:#fffde7;box-shadow:inset 0 0 0 2px var(--warn);border-radius:3px}
+.xcel-inp.changed{background:#fffbf0;color:#7a5300}
+.excel-tbl tbody td.input-cell{padding:1px;text-align:center}
+.excel-tbl tbody td.input-cell:focus-within{background:#fffde7;outline:2px solid var(--warn);outline-offset:-2px;z-index:2;position:relative}
+/* add-pupil panel */
+.add-pupil-panel{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--gl);border-top:2px dashed #9fbe9f;border-radius:0 0 var(--r) var(--r)}
+.add-pupil-panel input{max-width:240px;padding:7px 11px;font-size:13px}
+/* generate all */
+.gen-all-btn{background:var(--g);color:#fff;border:none;padding:9px 20px;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:background .15s}
+.gen-all-btn:hover{background:var(--gm)}.gen-all-btn:disabled{opacity:.5;cursor:not-allowed}
+.gen-progress{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+/* responsive */
+@media(max-width:900px){.two-col{grid-template-columns:1fr}.mc-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.sidebar{width:44px}.nav-item span{display:none}.content{padding:14px}}
+</style>
 </head>
-
 <body>
-	<div id="app"></div>
-	<div class="save-toast" id="toast">✓ Marks saved</div>
+<div id="app"></div>
+<div class="save-toast" id="toast">✓ Marks saved</div>
 
-	<script>
-		// ══════════════════════════════════════════════════
-		//  CONFIG — matches hill-view-ps Supabase project
-		// ══════════════════════════════════════════════════
-		const SUPA_URL = NEXT_PUBLIC_SUPABASE_URL;
-		const SUPA_KEY = NEXT_PUBLIC_SUPABASE_ANON_KEY;
-		const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+<script>
+// ══════════════════════════════════════════════════
+//  CONFIG — matches hill-view-ps Supabase project
+// ══════════════════════════════════════════════════
+const SUPA_URL = 'https://gtguutliwmhntuigcqta.supabase.co';
+const SUPA_KEY = 'sb_publishable_32CnYot-3Kn2ysRljL9-zQ_G5r_QqLI';
+const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-		// ══════════════════════════════════════════════════
-		//  SCHEMA KNOWLEDGE (matches seed.sql exactly)
-		//  Subject levels: 'nursery' | 'p1-p3' | 'p4-p7'
-		//  Class→level:  KG* → nursery, P1/P2/P3 → p1-p3, P4+ → p4-p7
-		//  P7 grade: class name starts with 'P7'
-		// ══════════════════════════════════════════════════
-		const resolveLevel = name => {
-			if (name.startsWith('KG')) return 'nursery';
-			if (/^P[123]/.test(name)) return 'p1-p3';
-			return 'p4-p7';
-		};
-		const isP7Class = name => /^P7/.test(name);
+// ══════════════════════════════════════════════════
+//  SCHEMA KNOWLEDGE (matches seed.sql exactly)
+//  Subject levels: 'nursery' | 'p1-p3' | 'p4-p7'
+//  Class→level:  KG* → nursery, P1/P2/P3 → p1-p3, P4+ → p4-p7
+//  P7 grade: class name starts with 'P7'
+// ══════════════════════════════════════════════════
+const resolveLevel = name => {
+  if (name.startsWith('KG'))  return 'nursery';
+  if (/^P[123]/.test(name))   return 'p1-p3';
+  return 'p4-p7';
+};
+const isP7Class = name => /^P7/.test(name);
 
-		// ══════════════════════════════════════════════════
-		//  STATE
-		// ══════════════════════════════════════════════════
-		const S = {
-			user: null,          // from users table
-			view: 'overview',
-			// data
-			classes: [], subjects: [], pupils: [], marksMap: {},
-			// admin analytics (from views)
-			classPerf: [], submissions: [],
-			// teacher
-			selClass: null,      // admin class selector
-			pending: {},         // `${pupil_id}::${subject_id}` → score (unsaved)
-			saving: false,
-			saveMsg: null,
-			// report page
-			reportPupils: [],
-			reportSelId: null,
-			reportSummary: null,
-			reportSubjects: [],
-			// term settings (admin-controlled, used in all report prints)
-			termSettings: {
-				termLabel: 'Term 2, 2025',
-				endDate: '',
-				nextTermStart: '',
-				settingsMsg: null,
-			},
-			// ui
-			loading: true,
-			chartInst: null,
-			toastTimer: null,
-		};
+// ══════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════
+const S = {
+  user: null,          // from users table
+  view: 'overview',
+  // data
+  classes: [], subjects: [], pupils: [], marksMap: {},
+  // admin analytics (from views)
+  classPerf: [], submissions: [],
+  // teacher
+  selClass: null,      // admin class selector
+  pending: {},         // `${pupil_id}::${subject_id}` → score (unsaved)
+  saving: false,
+  saveMsg: null,
+  // report page
+  reportPupils: [],
+  reportSelId: null,
+  reportSummary: null,
+  reportSubjects: [],
+  // ui
+  loading: true,
+  chartInst: null,
+  toastTimer: null,
+};
 
-		// ══════════════════════════════════════════════════
-		//  CALC (client-side live recalc from pending edits)
-		// ══════════════════════════════════════════════════
-		const toAgg = s => s >= 90 ? 1 : s >= 80 ? 2 : s >= 70 ? 3 : s >= 60 ? 4 : s >= 50 ? 5 : s >= 40 ? 6 : s >= 30 ? 7 : 8;
-		const pleGrade = t => t === 4 ? 'D1' : t <= 6 ? 'D2' : t <= 8 ? 'C3' : t <= 10 ? 'C4' : t <= 12 ? 'P5' : t <= 14 ? 'P6' : t <= 16 ? 'P7' : 'F9';
-		const gradeStyle = g => {
-			if (['D1', 'D2'].includes(g)) return 'background:#d1f0dc;color:#0a4f24';
-			if (['C3', 'C4'].includes(g)) return 'background:#d0e8ff;color:#0a3a6b';
-			if (['P5', 'P6', 'P7'].includes(g)) return 'background:#fff3cd;color:#7a5300';
-			return 'background:#fde0e0;color:#7a1111';
-		};
-		const scoreClass = v => v >= 80 ? 'sb-a' : v >= 60 ? 'sb-b' : v >= 40 ? 'sb-c' : 'sb-f';
-		const scoreLabel = v => v >= 80 ? 'Excellent' : v >= 60 ? 'Good' : v >= 40 ? 'Average' : 'Needs Improvement';
+// ══════════════════════════════════════════════════
+//  CALC (client-side live recalc from pending edits)
+// ══════════════════════════════════════════════════
+const toAgg    = s => s>=90?1:s>=80?2:s>=70?3:s>=60?4:s>=50?5:s>=40?6:s>=30?7:8;
+const pleGrade = t => t===4?'D1':t<=6?'D2':t<=8?'C3':t<=10?'C4':t<=12?'P5':t<=14?'P6':t<=16?'P7':'F9';
+const gradeStyle = g => {
+  if(['D1','D2'].includes(g)) return'background:#d1f0dc;color:#0a4f24';
+  if(['C3','C4'].includes(g)) return'background:#d0e8ff;color:#0a3a6b';
+  if(['P5','P6','P7'].includes(g)) return'background:#fff3cd;color:#7a5300';
+  return'background:#fde0e0;color:#7a1111';
+};
+const scoreClass = v => v>=80?'sb-a':v>=60?'sb-b':v>=40?'sb-c':'sb-f';
+const scoreLabel = v => v>=80?'Excellent':v>=60?'Good':v>=40?'Average':'Needs Improvement';
 
-		const markKey = (pid, sid) => `${pid}::${sid}`;
-		const getScore = (pid, sid) => {
-			const k = markKey(pid, sid);
-			return S.pending[k] !== undefined ? S.pending[k] : (S.marksMap[k] ?? 0);
-		};
+const markKey = (pid, sid) => `${pid}::${sid}`;
+const getScore = (pid, sid) => {
+  const k = markKey(pid, sid);
+  return S.pending[k] !== undefined ? S.pending[k] : (S.marksMap[k] ?? 0);
+};
 
-		function classSubs(classId) {
-			const cls = S.classes.find(c => c.id === classId); if (!cls) return [];
-			return S.subjects.filter(s => s.level === resolveLevel(cls.name));
-		}
+function classSubs(classId) {
+  const cls = S.classes.find(c=>c.id===classId); if(!cls) return [];
+  return S.subjects.filter(s=>s.level===resolveLevel(cls.name));
+}
 
-		function rankPupils(classId) {
-			const subs = classSubs(classId);
-			return S.pupils.filter(p => p.class_id === classId)
-				.map(p => {
-					const scores = subs.map(s => getScore(p.id, s.id));
-					const total = scores.reduce((a, b) => a + b, 0);
-					const avg = subs.length ? total / subs.length : 0;
-					return {...p, scores, total, avg};
-				})
-				.sort((a, b) => b.avg - a.avg)
-				.map((p, i) => ({...p, pos: i + 1}));
-		}
+function rankPupils(classId) {
+  const subs = classSubs(classId);
+  return S.pupils.filter(p=>p.class_id===classId)
+    .map(p=>{
+      const scores = subs.map(s=>getScore(p.id,s.id));
+      const total  = scores.reduce((a,b)=>a+b,0);
+      const avg    = subs.length?total/subs.length:0;
+      return{...p,scores,total,avg};
+    })
+    .sort((a,b)=>b.avg-a.avg)
+    .map((p,i)=>({...p,pos:i+1}));
+}
 
-		function pleCalc(pupilId, classId) {
-			const subs = classSubs(classId); // p4-p7 level subs
-			const aggs = subs.map(s => ({s, sc: getScore(pupilId, s.id), ag: toAgg(getScore(pupilId, s.id))}));
-			const best4 = [...aggs].sort((a, b) => a.ag - b.ag).slice(0, 4);
-			const tot = best4.reduce((s, a) => s + a.ag, 0);
-			return {aggs, best4, tot, grade: pleGrade(tot)};
-		}
+function pleCalc(pupilId, classId) {
+  const subs = classSubs(classId); // p4-p7 level subs
+  const aggs = subs.map(s=>({s,sc:getScore(pupilId,s.id),ag:toAgg(getScore(pupilId,s.id))}));
+  const best4= [...aggs].sort((a,b)=>a.ag-b.ag).slice(0,4);
+  const tot  = best4.reduce((s,a)=>s+a.ag,0);
+  return{aggs,best4,tot,grade:pleGrade(tot)};
+}
 
-		// ══════════════════════════════════════════════════
-		//  DATA LOADING
-		// ══════════════════════════════════════════════════
-		async function loadAll() {
-			S.loading = true; render();
+// ══════════════════════════════════════════════════
+//  DATA LOADING
+// ══════════════════════════════════════════════════
+async function loadAll() {
+  S.loading=true; render();
 
-			// Load term settings early (local instant, then remote async)
-			await loadTermSettingsRemote();
+  // Core tables
+  const [clsR,subR,pupR] = await Promise.all([
+    db.from('classes').select('id,name').order('name'),
+    db.from('subjects').select('id,name,level').order('name'),
+    db.from('pupils').select('id,name,class_id').order('name'),  // RLS filters teachers
+  ]);
+  S.classes  = clsR.data  || [];
+  S.subjects = subR.data  || [];
+  S.pupils   = pupR.data  || [];
 
-			// Core tables
-			const [clsR, subR, pupR] = await Promise.all([
-				db.from('classes').select('id,name').order('name'),
-				db.from('subjects').select('id,name,level').order('name'),
-				db.from('pupils').select('id,name,class_id').order('name'),  // RLS filters teachers
-			]);
-			S.classes = clsR.data || [];
-			S.subjects = subR.data || [];
-			S.pupils = pupR.data || [];
-
-			// Marks
-			S.marksMap = {};
-			const pids = S.pupils.map(p => p.id);
-			if (pids.length) {
-				for (let i = 0; i < pids.length; i += 200) {
-					const {data: mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id', pids.slice(i, i + 200));
-					(mks || []).forEach(m => {S.marksMap[markKey(m.pupil_id, m.subject_id)] = m.score;});
-				}
-			}
-
-			// Admin: load views
-			if (S.user.role === 'admin') {
-				const [perfR, subStatusR] = await Promise.all([
-					db.from('class_performance').select('class_id,class_name,average_score,best_pupil,weakest_pupil').order('class_name'),
-					db.from('teacher_submission_status').select('teacher_name,class_name,subjects_entered,subject_count').order('class_name'),
-				]);
-				S.classPerf = perfR.data || [];
-				S.submissions = subStatusR.data || [];
-			}
-
-			// Default selection
-			if (!S.selClass) S.selClass = S.classes[0]?.id || null;
-
-			S.loading = false; S.pending = {}; render();
-		}
-
-		async function loadReportPupils() {
-			const {data} = await db.from('pupil_report_summary')
-				.select('pupil_id,pupil_name,class_name').order('class_name').order('pupil_name');
-			S.reportPupils = data || [];
-			if (!S.reportSelId && S.reportPupils.length) S.reportSelId = S.reportPupils[0].pupil_id;
-			if (S.reportSelId) await loadReportForPupil(S.reportSelId);
-			else render();
-		}
-
-		async function loadReportForPupil(pupilId) {
-			S.reportSelId = pupilId;
-			const [sumR, subjR] = await Promise.all([
-				db.from('pupil_report_summary').select('pupil_id,pupil_name,class_name,total_score,average_score,position,uneb_grade').eq('pupil_id', pupilId).single(),
-				db.from('pupil_report_subjects').select('subject_name,score').eq('pupil_id', pupilId),
-			]);
-			S.reportSummary = sumR.data || null;
-			S.reportSubjects = subjR.data || [];
-			render();
-		}
-
-		// ══════════════════════════════════════════════════
-		//  MARKS SAVE (batch — matches /api/teacher/marks)
-		// ══════════════════════════════════════════════════
-		async function saveMarks() {
-			const updates = Object.entries(S.pending).map(([k, score]) => {
-				const [pupil_id, subject_id] = k.split('::');
-				return {pupil_id, subject_id, score: parseInt(score) || 0};
-			});
-			if (!updates.length) {S.saveMsg = 'No changes to save.'; render(); return;}
-			S.saving = true; S.saveMsg = null; render();
-			const {data: {user}} = await db.auth.getUser();
-			const payload = updates.map(u => ({...u, teacher_id: user.id}));
-			const {error} = await db.from('marks').upsert(payload, {onConflict: 'pupil_id,subject_id'});
-			if (error) {S.saveMsg = 'Error: ' + error.message;}
-			else {
-				updates.forEach(u => {S.marksMap[markKey(u.pupil_id, u.subject_id)] = u.score;});
-				S.pending = {}; S.saveMsg = 'Marks saved successfully.';
-				flashToast();
-			}
-			S.saving = false; render();
-		}
-
-		async function addPupil(name, classId) {
-			const {data, error} = await db.from('pupils').insert({name, class_id: classId}).select('id,name,class_id').single();
-			if (error) return error.message;
-			S.pupils = [...S.pupils, data];
-			render(); return null;
-		}
-
-		function setPending(pid, sid, val) {
-			const v = Math.max(0, Math.min(100, parseInt(val) || 0));
-			S.pending[markKey(pid, sid)] = v;
-			// live-update avg/pos in DOM without full re-render
-			refreshLiveRow(pid, sid);
-		}
-
-		function refreshLiveRow(pid, sid) {
-			const p = S.pupils.find(x => x.id === pid); if (!p) return;
-			const cid = p.class_id;
-			const cls = S.classes.find(c => c.id === cid);
-			const p7 = cls && isP7Class(cls.name);
-			rankPupils(cid).forEach(rp => {
-				const ae = document.getElementById(`avg-${rp.id}`); if (ae) ae.textContent = rp.avg.toFixed(1);
-				const pe = document.getElementById(`pos-${rp.id}`); if (pe) {pe.innerHTML = ''; pe.appendChild(mkPosB(rp.pos));}
-				if (p7) {const ge = document.getElementById(`grade-${rp.id}`); if (ge) {const pd = pleCalc(rp.id, cid); ge.innerHTML = ''; const s = e('span', {class: 'grade-b', style: gradeStyle(pd.grade)}); s.textContent = pd.grade; ge.appendChild(s);} }
-			});
-		}
-
-		function flashToast() {
-			if (S.toastTimer) clearTimeout(S.toastTimer);
-			const t = document.getElementById('toast'); if (t) {t.classList.add('show'); S.toastTimer = setTimeout(() => t.classList.remove('show'), 2200);}
-		}
-
-		// ══════════════════════════════════════════════════
-		//  AUTH
-		// ══════════════════════════════════════════════════
-		async function signIn(email, pw) {
-			const {data, error} = await db.auth.signInWithPassword({email, password: pw});
-			if (error) return error.message;
-			// Read from 'users' table (not 'profiles') — matches actual schema
-			const {data: u, error: ue} = await db.from('users').select('id,name,email,role,class_id').eq('id', data.user.id).single();
-			if (ue || !u) return 'Account found but no user record. Run mock_data.sql in Supabase first.';
-			S.user = u; S.view = u.role === 'admin' ? 'overview' : 'marks';
-			await loadAll(); return null;
-		}
-
-		async function signOut() {
-			await db.auth.signOut();
-			Object.assign(S, {user: null, view: 'overview', classes: [], subjects: [], pupils: [], marksMap: {}, classPerf: [], submissions: [], selClass: null, pending: {}, saving: false, saveMsg: null, reportPupils: [], reportSelId: null, reportSummary: null, reportSubjects: [], loading: false, chartInst: null});
-			render();
-		}
-
-		// ══════════════════════════════════════════════════
-		//  PRINT REPORT — routes to correct template
-		// ══════════════════════════════════════════════════
-		function printReport(summary, subjects) {
-			const isNursery = resolveLevel(summary.class_name) === 'nursery';
-			if (isNursery) printNurseryReport(summary, subjects);
-			else printPrimaryReport(summary, subjects);
-		}
-
-		// ── Shared assets ─────────────────────────────────
-		const LOGO_PATH = 'assets/logo.jpg';
-		const SCHOOL_NAME = 'Hill View Primary School';
-		const SCHOOL_MOTTO = '"Striving for Excellence"';
-		const SCHOOL_TEL = 'Tel: —';
-
-		// Live getters — always read from state so reports pick up admin changes immediately
-		const getTermLabel = () => S.termSettings.termLabel || 'Term —';
-		const getEndDate = () => S.termSettings.endDate || '—';
-		const getNextTermStart = () => S.termSettings.nextTermStart || '—';
-
-		// ── Term settings persistence (localStorage + Supabase app_settings table fallback) ──
-		const SETTINGS_KEY = 'hillview_term_settings';
-
-		function loadTermSettingsLocal() {
-			try {
-				const raw = localStorage.getItem(SETTINGS_KEY);
-				if (raw) {
-					const parsed = JSON.parse(raw);
-					Object.assign(S.termSettings, parsed);
-				}
-			} catch (e) { }
-		}
-
-		async function saveTermSettings() {
-			const payload = {
-				termLabel: S.termSettings.termLabel,
-				endDate: S.termSettings.endDate,
-				nextTermStart: S.termSettings.nextTermStart,
-			};
-			// Always save locally first (instant)
-			try {localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));} catch (e) { }
-			// Also persist to Supabase app_settings table if it exists (graceful fail)
-			try {
-				await db.from('app_settings').upsert(
-					{key: 'term', value: JSON.stringify(payload)},
-					{onConflict: 'key'}
-				);
-			} catch (e) { }
-			S.termSettings.settingsMsg = 'saved';
-			render();
-			setTimeout(() => {S.termSettings.settingsMsg = null; render();}, 2500);
-		}
-
-		async function loadTermSettingsRemote() {
-			loadTermSettingsLocal(); // load local first for speed
-			try {
-				const {data} = await db.from('app_settings').select('value').eq('key', 'term').single();
-				if (data?.value) {
-					const parsed = JSON.parse(data.value);
-					Object.assign(S.termSettings, parsed);
-					// Keep local in sync
-					try {localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));} catch (e) { }
-				}
-			} catch (e) { } // table may not exist yet — silent fail
-		}
-
-		// Dot colour from nursery score (0-100 numeric)
-		function nurseryDotColor(score) {
-			if (score >= 85) return '#1a7a3c'; // green  = Excellent
-			if (score >= 70) return '#1565c0'; // blue   = Very Good
-			if (score >= 50) return '#f9a825'; // yellow = Good
-			return '#c62828';                  // red    = Needs Improvement
-		}
-		function nurseryDotSvg(score) {
-			const c = nurseryDotColor(score);
-			return `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="10" fill="${c}"/></svg>`;
-		}
-		function nurseryLabel(score) {
-			if (score >= 85) return 'Excellent';
-			if (score >= 70) return 'Very Good';
-			if (score >= 50) return 'Good';
-			return 'Needs Improvement';
-		}
-
-		// Primary score colour
-		function primaryScoreColor(score) {
-			if (score >= 80) return '#0a4f24';
-			if (score >= 60) return '#0a3a6b';
-			if (score >= 40) return '#7a5300';
-			return '#c0392b';
-		}
-		function primaryRemarks(score) {
-			if (score >= 80) return 'Excellent';
-			if (score >= 60) return 'Good';
-			if (score >= 40) return 'Average';
-			return 'Needs Improvement';
-		}
-
-		// ── NURSERY REPORT TEMPLATE ───────────────────────
-		function printNurseryReport(summary, subjects) {
-			const w = window.open('', '_blank');
-
-			// ── Learning Areas come from DB (scored, show coloured dot) ──────────────
-			// Skills and Habits are fixed lists — printed as EMPTY circles for teacher
-			// to shade by hand based on observation.
-
-			const SKILLS = [
-				'Singing', 'Listening', 'Physical Education',
-				'Leadership', 'Shading & Drawing', 'Poems & Rhythms'
-			];
-			const HABITS = [
-				'Relates with Others', 'Cleanliness', 'Toilet Use',
-				'Punctuality', 'Attendance', 'Sharing'
-			];
-
-			// Empty circle SVG — teacher shades by hand
-			const emptyCircle = `<svg width="22" height="22" viewBox="0 0 22 22">
-    <circle cx="11" cy="11" r="9" fill="none" stroke="#111" stroke-width="1.8"/>
-  </svg>`;
-
-			const maxRows = Math.max(subjects.length, SKILLS.length, HABITS.length);
-			let tableRows = '';
-			for (let i = 0; i < maxRows; i++) {
-				const la = subjects[i];
-				const sk = SKILLS[i] || '';
-				const hb = HABITS[i] || '';
-				// Strip the "Learning Area N: " prefix for a cleaner printed label
-				const laLabel = la ? la.subject_name.replace(/^Learning Area \d+:\s*/i, '') : '';
-				tableRows += `<tr>
-      <td class="area-name">${laLabel}</td>
-      <td class="dot-cell">${la ? nurseryDotSvg(la.score) : ''}</td>
-      <td class="area-name">${sk}</td>
-      <td class="dot-cell">${sk ? emptyCircle : ''}</td>
-      <td class="area-name">${hb}</td>
-      <td class="dot-cell">${hb ? emptyCircle : ''}</td>
-    </tr>`;
-			}
-
-			const totalPupils = S.pupils.filter(p => {
-				const cls = S.classes.find(c => c.name === summary.class_name);
-				return cls && p.class_id === cls.id;
-			}).length;
-
-			w.document.write(`<!DOCTYPE html><html><head>
-<meta charset="UTF-8">
-<title>Report — ${summary.pupil_name}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  @media print{.noprint{display:none!important} body{margin:0;padding:10px}}
-  body{font-family:'Arial',sans-serif;font-size:12px;color:#111;background:#fff;padding:18px;max-width:780px;margin:0 auto}
-
-  .print-btn{display:block;margin:0 auto 16px;padding:9px 28px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
-
-  /* ── header ── */
-  .school-header{display:flex;align-items:center;gap:16px;border-bottom:3px double #1a6b3c;padding-bottom:10px;margin-bottom:8px}
-  .school-logo{width:72px;height:72px;object-fit:contain;flex-shrink:0}
-  .school-logo-placeholder{width:72px;height:72px;border-radius:50%;background:#e8f5ee;border:2px solid #1a6b3c;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a6b3c;text-align:center;font-weight:700;flex-shrink:0}
-  .school-info{flex:1;text-align:center}
-  .school-info h1{font-size:20px;font-weight:900;color:#1a4a24;text-transform:uppercase;letter-spacing:.04em}
-  .school-info .motto{font-style:italic;font-size:12px;color:#444;margin:2px 0}
-  .school-info .tel{font-size:11px;color:#666}
-
-  .report-title{text-align:center;font-size:14px;font-weight:900;text-transform:uppercase;border:2px solid #111;padding:5px 10px;margin:10px 0;letter-spacing:.04em}
-
-  /* ── pupil info ── */
-  .pupil-row{display:flex;gap:6px;align-items:baseline;margin-bottom:6px;font-size:12px}
-  .field-label{font-weight:700;white-space:nowrap}
-  .field-val{border-bottom:1.5px solid #111;flex:1;min-width:80px;padding:0 4px;font-size:13px;color:#1a4a24;font-weight:900;text-transform:uppercase}
-  .field-val.narrow{flex:none;width:90px}
-
-  /* ── key ── */
-  .key-section{border:1.5px solid #111;padding:7px 14px;margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:5px 24px}
-  .key-title{font-weight:900;font-size:11px;grid-column:span 2;margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em}
-  .key-item{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600}
-
-  /* ── position row ── */
-  .pos-row{display:flex;border:1.5px solid #111;margin-bottom:8px}
-  .pos-cell{flex:1;padding:5px 10px;border-right:1px solid #111;font-size:12px}
-  .pos-cell:last-child{border-right:none}
-  .pos-label{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#555}
-  .pos-value{font-size:17px;font-weight:900;color:#1a4a24;margin-top:2px}
-
-  /* ── assessment table ── */
-  .assess-table{width:100%;border-collapse:collapse;margin-bottom:10px}
-  .assess-table th{
-    background:#1a4a24;color:#fff;text-align:center;
-    padding:6px 4px;font-size:11px;font-weight:700;
-    text-transform:uppercase;border:1px solid #111;letter-spacing:.03em
+  // Marks
+  S.marksMap = {};
+  const pids = S.pupils.map(p=>p.id);
+  if(pids.length) {
+    for(let i=0;i<pids.length;i+=200) {
+      const {data:mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id',pids.slice(i,i+200));
+      (mks||[]).forEach(m=>{ S.marksMap[markKey(m.pupil_id,m.subject_id)]=m.score; });
+    }
   }
-  .assess-table td{border:1px solid #bbb;padding:5px 7px;vertical-align:middle}
-  .assess-table tbody tr:nth-child(even) td{background:#f8fdf9}
-  .area-name{font-weight:700;font-size:11px;text-transform:uppercase;width:24%}
-  .dot-cell{text-align:center;width:9%;padding:4px 2px!important}
 
-  /* note below table */
-  .obs-note{font-size:10px;color:#888;font-style:italic;margin-bottom:10px;padding-left:2px}
+  // Admin: load views
+  if(S.user.role==='admin') {
+    const [perfR,subStatusR] = await Promise.all([
+      db.from('class_performance').select('class_id,class_name,average_score,best_pupil,weakest_pupil').order('class_name'),
+      db.from('teacher_submission_status').select('teacher_name,class_name,subjects_entered,subject_count').order('class_name'),
+    ]);
+    S.classPerf   = perfR.data   || [];
+    S.submissions = subStatusR.data || [];
+  }
 
-  /* ── comments ── */
-  .comment-block{margin-bottom:8px}
-  .comment-label{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-  .comment-line{border-bottom:1px solid #bbb;height:20px;margin-bottom:4px}
-  .sig-row{display:flex;justify-content:flex-end;align-items:baseline;gap:6px;font-size:11px;margin-top:2px;margin-bottom:8px}
-  .sig-line{border-bottom:1.5px solid #111;width:180px}
+  // Default selection
+  if(!S.selClass) S.selClass = S.classes[0]?.id||null;
 
-  /* ── finance ── */
-  .finance-section{border-top:1.5px solid #bbb;padding-top:8px;font-size:11px;margin-top:6px}
-  .finance-row{display:flex;gap:20px;margin-bottom:5px;flex-wrap:wrap}
-  .finance-item{display:flex;gap:5px;align-items:baseline}
-  .finance-label{font-weight:700;white-space:nowrap}
-  .finance-val{border-bottom:1px solid #111;min-width:90px;padding:0 4px}
+  S.loading=false; S.pending={}; render();
+}
 
-  .doc-footer{margin-top:14px;text-align:center;font-size:10px;color:#bbb;border-top:1px solid #eee;padding-top:6px}
-</style>
-</head><body>
+async function loadReportPupils() {
+  const {data} = await db.from('pupil_report_summary')
+    .select('pupil_id,pupil_name,class_name').order('class_name').order('pupil_name');
+  S.reportPupils = data||[];
+  if(!S.reportSelId && S.reportPupils.length) S.reportSelId=S.reportPupils[0].pupil_id;
+  if(S.reportSelId) await loadReportForPupil(S.reportSelId);
+  else render();
+}
 
-<button class="print-btn noprint" onclick="window.print()">🖨 Print / Save as PDF</button>
+async function loadReportForPupil(pupilId) {
+  S.reportSelId=pupilId;
+  const [sumR,subjR] = await Promise.all([
+    db.from('pupil_report_summary').select('pupil_id,pupil_name,class_name,total_score,average_score,position,uneb_grade').eq('pupil_id',pupilId).single(),
+    db.from('pupil_report_subjects').select('subject_name,score').eq('pupil_id',pupilId),
+  ]);
+  S.reportSummary  = sumR.data||null;
+  S.reportSubjects = subjR.data||[];
+  render();
+}
 
-<!-- HEADER -->
-<div class="school-header">
-  <img src="${LOGO_PATH}" alt="Logo" class="school-logo"
-       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-  <div class="school-logo-placeholder" style="display:none">LOGO</div>
-  <div class="school-info">
-    <h1>${SCHOOL_NAME}</h1>
-    <div class="motto">${SCHOOL_MOTTO}</div>
-    <div class="tel">${SCHOOL_TEL}</div>
+// ══════════════════════════════════════════════════
+//  MARKS SAVE (batch — matches /api/teacher/marks)
+// ══════════════════════════════════════════════════
+async function saveMarks() {
+  const updates = Object.entries(S.pending).map(([k,score])=>{
+    const [pupil_id,subject_id]=k.split('::');
+    return{pupil_id,subject_id,score:parseInt(score)||0};
+  });
+  if(!updates.length){S.saveMsg='No changes to save.';render();return;}
+  S.saving=true; S.saveMsg=null; render();
+  const {data:{user}} = await db.auth.getUser();
+  const payload = updates.map(u=>({...u,teacher_id:user.id}));
+  const {error} = await db.from('marks').upsert(payload,{onConflict:'pupil_id,subject_id'});
+  if(error){S.saveMsg='Error: '+error.message;}
+  else{
+    updates.forEach(u=>{ S.marksMap[markKey(u.pupil_id,u.subject_id)]=u.score; });
+    S.pending={}; S.saveMsg='Marks saved successfully.';
+    flashToast();
+  }
+  S.saving=false; render();
+}
+
+async function addPupil(name, classId) {
+  const {data,error} = await db.from('pupils').insert({name,class_id:classId}).select('id,name,class_id').single();
+  if(error) return error.message;
+  S.pupils=[...S.pupils,data];
+  render(); return null;
+}
+
+function setPending(pid, sid, val) {
+  const v = Math.max(0,Math.min(100,parseInt(val)||0));
+  S.pending[markKey(pid,sid)]=v;
+  // live-update avg/pos in DOM without full re-render
+  refreshLiveRow(pid, sid);
+}
+
+function refreshLiveRow(pid, sid) {
+  const p = S.pupils.find(x=>x.id===pid); if(!p) return;
+  const cid=p.class_id;
+  const cls=S.classes.find(c=>c.id===cid);
+  const p7=cls&&isP7Class(cls.name);
+  rankPupils(cid).forEach(rp=>{
+    const goodColor=rp.avg>=60?'var(--g)':'var(--danger)';
+    const te=document.getElementById(`tot-${rp.id}`); if(te){te.textContent=rp.total;te.style.color=goodColor;}
+    const ae=document.getElementById(`avg-${rp.id}`); if(ae){ae.textContent=rp.avg.toFixed(1);ae.style.color=goodColor;}
+    const pe=document.getElementById(`pos-${rp.id}`); if(pe){pe.innerHTML='';pe.appendChild(mkPosB(rp.pos));}
+    if(p7){const ge=document.getElementById(`grade-${rp.id}`);if(ge){const pd=pleCalc(rp.id,cid);ge.innerHTML='';const s=e('span',{class:'grade-b',style:gradeStyle(pd.grade)});s.textContent=pd.grade;ge.appendChild(s);}}
+  });
+}
+
+function flashToast() {
+  if(S.toastTimer) clearTimeout(S.toastTimer);
+  const t=document.getElementById('toast'); if(t){t.classList.add('show');S.toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
+}
+
+// ══════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════
+async function signIn(email,pw) {
+  const {data,error} = await db.auth.signInWithPassword({email,password:pw});
+  if(error) {
+    if(error.message.includes('Invalid login')) return 'Wrong email or password.';
+    if(error.message.includes('Email not confirmed')) return 'Email not confirmed — check your inbox or disable email confirmation in Supabase Auth settings.';
+    return 'Auth error: '+error.message;
+  }
+  // Read from 'users' table — matches hill-view-ps schema (NOT 'profiles')
+  const {data:u,error:ue} = await db.from('users').select('id,name,email,role,class_id').eq('id',data.user.id).single();
+  if(ue) return `Auth OK but users table error: "${ue.message}". Check that mock_data.sql was run with the correct auth user IDs.`;
+  if(!u) return 'Auth OK but no row in users table for this account. Run mock_data.sql and replace UUID placeholders with real auth user IDs.';
+  S.user=u; S.view=u.role==='admin'?'overview':'marks';
+  await loadAll(); return null;
+}
+
+async function signOut() {
+  await db.auth.signOut();
+  Object.assign(S,{user:null,view:'overview',classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],loading:false,chartInst:null});
+  render();
+}
+
+// ══════════════════════════════════════════════════
+//  NURSERY REPORT HELPERS
+// ══════════════════════════════════════════════════
+// Seven NCDC ECD learning areas mapped from subject names
+const NURSERY_AREAS = [
+  'Language & Literacy',
+  'Mathematics & Numeracy',
+  'Creative Arts',
+  'Physical & Health Education',
+  'Social & Emotional Development',
+  'Environmental Studies',
+  'Religious & Moral Education',
+];
+
+// Score → number of filled circles (out of 5)
+function scoreToDots(score) {
+  if (score >= 90) return 5;
+  if (score >= 75) return 4;
+  if (score >= 60) return 3;
+  if (score >= 45) return 2;
+  if (score >= 25) return 1;
+  return 0;
+}
+
+function renderDots(filled, total=5) {
+  let out = '';
+  for (let i = 0; i < total; i++) {
+    if (i < filled) {
+      // Only marks circles are shaded
+      out += `<span class="dot dot-filled"></span>`;
+    } else {
+      out += `<span class="dot dot-empty"></span>`;
+    }
+  }
+  return out;
+}
+
+function dotLabel(filled) {
+  const labels = ['Beginning','Developing','Approaching','Meeting','Exceeding'];
+  return labels[Math.min(filled, 4)] || 'Beginning';
+}
+
+// Shared header/footer HTML strings (same as primary report)
+const SHARED_REPORT_CSS = `
+    body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#1a1a1a;padding:0 24px}
+    @media print{.noprint{display:none}}
+    h1{font-size:24px;text-align:center;color:#1a6b3c;margin-bottom:3px}
+    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:22px}
+    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px;background:#f0f8f4;border-radius:8px;margin-bottom:20px}
+    .meta div{font-size:13px}.meta strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.meta span{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.04em}
+    footer{margin-top:24px;padding-top:12px;border-top:1px solid #e0e0e0;font-size:11px;color:#aaa;text-align:center}
+`;
+
+const sharedHeader = (pupilName, className) => `
+  <h1>Hill View Primary School</h1>
+  <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
+  <div class="meta">
+    <div><span>Pupil</span><strong>${pupilName}</strong></div>
+    <div><span>Class</span><strong>${className}</strong></div>
+    <div><span>Level</span><strong>Nursery</strong></div>
   </div>
-</div>
+`;
 
-<div class="report-title">End of Term Individual Assessment Report</div>
+const sharedFooter = () => `<footer>Generated by Hill View School Report Management System</footer>`;
 
-<!-- PUPIL INFO -->
-<div class="pupil-row">
-  <span class="field-label">Name:</span>
-  <span class="field-val">${summary.pupil_name}</span>
-  <span class="field-label">Class:</span>
-  <span class="field-val narrow">${summary.class_name}</span>
-  <span class="field-label">Date:</span>
-  <span class="field-val narrow"></span>
-</div>
+function nurseryReportHTML(summary, subjects) {
+  const rows = subjects.map(s => {
+    const filled = scoreToDots(s.score);
+    return `<tr>
+      <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:13px">${s.subject_name}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center">
+        <div style="display:flex;gap:6px;justify-content:center;align-items:center">
+          ${renderDots(filled)}
+        </div>
+      </td>
+      <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;color:#555">${dotLabel(filled)}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;font-size:13px;font-weight:700;color:#1a6b3c">${s.score}</td>
+    </tr>`;
+  }).join('');
 
-<!-- KEY -->
-<div class="key-section">
-  <div class="key-title">Key (Learning Areas):</div>
-  <div class="key-item">
-    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#1a7a3c"/></svg>
-    Excellent (85%–100%)
+  return `<!DOCTYPE html><html><head><title>Nursery Report — ${summary.pupil_name}</title>
+  <style>
+    ${SHARED_REPORT_CSS}
+    .dot{display:inline-block;width:18px;height:18px;border-radius:50%;border:2px solid #1a6b3c;box-sizing:border-box}
+    .dot-filled{background:#1a6b3c}
+    .dot-empty{background:transparent}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#1a6b3c;color:#fff;padding:9px 12px;text-align:left;font-weight:500}
+    .scale-key{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;background:#f0f8f4;border-radius:8px;margin-bottom:20px;font-size:12px;color:#555}
+    .scale-key .k-item{display:flex;align-items:center;gap:6px}
+  </style></head><body>
+  <button class="noprint" onclick="window.print()" style="display:block;margin:0 auto 20px;padding:9px 24px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Print / Save as PDF</button>
+  ${sharedHeader(summary.pupil_name, summary.class_name)}
+  <div class="scale-key">
+    <strong style="color:#1a6b3c;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Scale:</strong>
+    ${[1,2,3,4,5].map(n=>`<span class="k-item">${renderDots(n,5)}<span>${n} — ${dotLabel(n)}</span></span>`).join('')}
   </div>
-  <div class="key-item">
-    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#f9a825"/></svg>
-    Good (50%–69%)
+  <table>
+    <thead><tr>
+      <th>Learning Area</th>
+      <th style="text-align:center">Achievement</th>
+      <th>Level</th>
+      <th style="text-align:center">Score</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${sharedFooter()}
+  </body></html>`;
+}
+
+// ══════════════════════════════════════════════════
+//  PRINT REPORT
+// ══════════════════════════════════════════════════
+function printReport(summary, subjects) {
+  const isNursery = summary.class_name && summary.class_name.startsWith('KG');
+  const w = window.open('', '_blank');
+
+  if (isNursery) {
+    w.document.write(nurseryReportHTML(summary, subjects));
+  } else {
+    const isGraded = !!summary.uneb_grade;
+    w.document.write(`<!DOCTYPE html><html><head><title>Report — ${summary.pupil_name}</title>
+  <style>
+    ${SHARED_REPORT_CSS}
+    table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1a6b3c;color:#fff;padding:9px 12px;text-align:left;font-weight:500}td{padding:8px 12px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
+    ${isGraded?'.ple{margin-top:20px;padding:14px;background:#f0f8f4;border-radius:8px}.ple h3{font-size:13px;font-weight:700;color:#1a6b3c;margin-bottom:10px}.grade-chip{display:inline-block;padding:5px 18px;border-radius:20px;font-size:17px;font-weight:700}':''}
+  </style></head><body>
+  <button class="noprint" onclick="window.print()" style="display:block;margin:0 auto 20px;padding:9px 24px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Print / Save as PDF</button>
+  <h1>Hill View Primary School</h1>
+  <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
+  <div class="meta">
+    <div><span>Pupil</span><strong>${summary.pupil_name}</strong></div>
+    <div><span>Class</span><strong>${summary.class_name}</strong></div>
+    <div><span>Position</span><strong>${summary.position??'–'}</strong></div>
   </div>
-  <div class="key-item">
-    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#1565c0"/></svg>
-    Very Good (70%–84%)
+  <table><thead><tr><th>Subject</th><th style="text-align:center">Score</th><th style="text-align:center">/ 100</th><th>Remarks</th></tr></thead>
+  <tbody>${subjects.map(s=>`<tr><td>${s.subject_name}</td><td style="text-align:center;font-weight:700;color:${s.score>=80?'#0a4f24':s.score>=60?'#0a3a6b':s.score>=40?'#7a5300':'#c0392b'}">${s.score}</td><td style="text-align:center;color:#999">100</td><td style="color:${s.score>=80?'#0a4f24':s.score>=60?'#0a3a6b':s.score>=40?'#7a5300':'#c0392b'}">${scoreLabel(s.score)}</td></tr>`).join('')}</tbody></table>
+  <div class="meta" style="margin-top:16px">
+    <div><span>Total Score</span><strong>${summary.total_score}</strong></div>
+    <div><span>Average</span><strong>${parseFloat(summary.average_score).toFixed(1)}%</strong></div>
+    <div><span>Position</span><strong>${summary.position??'–'}</strong></div>
   </div>
-  <div class="key-item">
-    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#c62828"/></svg>
-    Needs Improvement (0%–49%)
-  </div>
-</div>
-
-<!-- POSITION ROW -->
-<div class="pos-row">
-  <div class="pos-cell">
-    <div class="pos-label">Position</div>
-    <div class="pos-value">${summary.position ?? '—'}</div>
-  </div>
-  <div class="pos-cell">
-    <div class="pos-label">Out of</div>
-    <div class="pos-value">${totalPupils}</div>
-  </div>
-  <div class="pos-cell">
-    <div class="pos-label">Term</div>
-    <div class="pos-value">${getTermLabel()}</div>
-  </div>
-</div>
-
-<!-- ASSESSMENT TABLE -->
-<table class="assess-table">
-  <thead>
-    <tr>
-      <th colspan="2">Learning Areas</th>
-      <th colspan="2">Skills</th>
-      <th colspan="2">Habits</th>
-    </tr>
-  </thead>
-  <tbody>${tableRows}</tbody>
-</table>
-<p class="obs-note">* Skills and Habits circles to be shaded by class teacher based on observation.</p>
-
-<!-- COMMENTS — left blank for handwriting -->
-<div class="comment-block">
-  <div class="comment-label">Class Teacher's Comment:</div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="sig-row">Signature: <span class="sig-line"></span></div>
-</div>
-
-<div class="comment-block">
-  <div class="comment-label">Head Teacher's Comment:</div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="sig-row">Signature: <span class="sig-line"></span></div>
-</div>
-
-<!-- FINANCE — balance/fees left blank for manual entry; dates from admin settings -->
-<div class="finance-section">
-  <div class="finance-row">
-    <div class="finance-item">
-      <span class="finance-label">This term's balance:</span>
-      <span class="finance-val"></span>
-    </div>
-    <div class="finance-item">
-      <span class="finance-label">Next term's fees:</span>
-      <span class="finance-val"></span>
-    </div>
-  </div>
-  <div class="finance-row">
-    <div class="finance-item">
-      <span class="finance-label">This term ended on:</span>
-      <span class="finance-val">${getEndDate()}</span>
-    </div>
-    <div class="finance-item">
-      <span class="finance-label">Next term begins on:</span>
-      <span class="finance-val">${getNextTermStart()}</span>
-    </div>
-  </div>
-</div>
-
-<div class="doc-footer">Hill View Primary School — Report Management System</div>
-</body></html>`);
-			w.document.close();
-		}
-
-		// ── PRIMARY REPORT TEMPLATE ───────────────────────
-		function printPrimaryReport(summary, subjects) {
-			const w = window.open('', '_blank');
-			const isP7 = !!summary.uneb_grade;
-			const totalPupils = S.pupils.filter(p => {
-				const cls = S.classes.find(c => c.name === summary.class_name);
-				return cls && p.class_id === cls.id;
-			}).length;
-
-			w.document.write(`<!DOCTYPE html><html><head>
-<meta charset="UTF-8">
-<title>Report — ${summary.pupil_name}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  @media print{.noprint{display:none!important} body{margin:0}}
-  body{font-family:'Arial',sans-serif;font-size:12px;color:#111;background:#fff;padding:18px;max-width:780px;margin:0 auto}
-
-  .print-btn{display:block;margin:0 auto 16px;padding:9px 28px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
-
-  /* ── header ── */
-  .school-header{display:flex;align-items:center;gap:16px;border-bottom:3px double #1a6b3c;padding-bottom:10px;margin-bottom:8px}
-  .school-logo{width:72px;height:72px;object-fit:contain;flex-shrink:0}
-  .school-logo-placeholder{width:72px;height:72px;border-radius:50%;background:#e8f5ee;border:2px solid #1a6b3c;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a6b3c;text-align:center;font-weight:700;flex-shrink:0}
-  .school-info{flex:1;text-align:center}
-  .school-info h1{font-size:20px;font-weight:900;color:#1a4a24;text-transform:uppercase;letter-spacing:.04em}
-  .school-info .motto{font-style:italic;font-size:12px;color:#444;margin:2px 0}
-  .school-info .tel{font-size:11px;color:#666}
-
-  .report-title{text-align:center;font-size:14px;font-weight:900;text-transform:uppercase;border:2px solid #111;padding:5px 10px;margin:10px 0;letter-spacing:.04em}
-
-  /* ── pupil meta ── */
-  .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;border:1.5px solid #111;margin-bottom:8px}
-  .meta-cell{padding:6px 10px;border-right:1px solid #aaa}
-  .meta-cell:last-child{border-right:none}
-  .meta-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em}
-  .meta-value{font-size:15px;font-weight:900;color:#1a4a24;margin-top:2px}
-
-  /* ── marks table ── */
-  .marks-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
-  .marks-table th{background:#1a4a24;color:#fff;padding:7px 10px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;border:1px solid #0f3020}
-  .marks-table th.center{text-align:center}
-  .marks-table td{padding:6px 10px;border-bottom:1px solid #ddd;border-left:1px solid #eee;vertical-align:middle}
-  .marks-table tr:nth-child(even) td{background:#f6faf7}
-  .marks-table tr:hover td{background:#edf7f1}
-  .marks-table .subj-name{font-weight:600;font-size:12px}
-  .score-cell{text-align:center;font-weight:900;font-size:15px}
-  .out-cell{text-align:center;color:#999;font-size:12px}
-  .remark-cell{font-weight:600;font-size:11px}
-
-  /* ── summary footer ── */
-  .summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;border:1.5px solid #111;margin-bottom:12px}
-  .sum-cell{padding:8px 10px;border-right:1px solid #aaa;text-align:center}
-  .sum-cell:last-child{border-right:none}
-  .sum-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em}
-  .sum-value{font-size:18px;font-weight:900;color:#1a4a24;margin-top:2px}
-
-  /* ── PLE grade chip ── */
-  .ple-section{margin-bottom:12px;padding:10px 14px;background:#e8f5ee;border:1.5px solid #1a6b3c;border-radius:6px;display:flex;align-items:center;gap:14px}
-  .ple-label{font-size:12px;font-weight:700;color:#0f4a2a}
-  .grade-chip{display:inline-block;padding:5px 20px;border-radius:20px;font-size:18px;font-weight:900}
-
-  /* ── comments ── */
-  .comment-section{margin-bottom:10px}
-  .comment-label{font-weight:700;font-size:11px;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
-  .comment-line{border-bottom:1px solid #aaa;height:19px;margin-bottom:4px}
-  .sig-row{display:flex;justify-content:flex-end;font-size:11px;margin-bottom:8px;gap:6px;align-items:baseline}
-  .sig-line{border-bottom:1px solid #111;width:180px}
-
-  /* ── finance ── */
-  .finance-section{border-top:1.5px solid #aaa;padding-top:8px;font-size:11px;margin-top:6px}
-  .finance-row{display:flex;gap:16px;margin-bottom:4px;flex-wrap:wrap}
-  .finance-item{display:flex;gap:4px;align-items:baseline}
-  .finance-label{font-weight:700;white-space:nowrap}
-  .finance-val{border-bottom:1px solid #111;min-width:90px;padding:0 4px}
-
-  .doc-footer{margin-top:14px;text-align:center;font-size:10px;color:#bbb;border-top:1px solid #eee;padding-top:6px}
-</style>
-</head><body>
-
-<button class="print-btn noprint" onclick="window.print()">🖨 Print / Save as PDF</button>
-
-<!-- HEADER -->
-<div class="school-header">
-  <img src="${LOGO_PATH}" alt="Logo" class="school-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-  <div class="school-logo-placeholder" style="display:none">LOGO</div>
-  <div class="school-info">
-    <h1>${SCHOOL_NAME}</h1>
-    <div class="motto">${SCHOOL_MOTTO}</div>
-    <div class="tel">${SCHOOL_TEL}</div>
-  </div>
-</div>
-
-<div class="report-title">End of Term Academic Report Card</div>
-
-<!-- PUPIL META -->
-<div class="meta-grid">
-  <div class="meta-cell"><div class="meta-label">Pupil Name</div><div class="meta-value">${summary.pupil_name}</div></div>
-  <div class="meta-cell"><div class="meta-label">Class</div><div class="meta-value">${summary.class_name}</div></div>
-  <div class="meta-cell"><div class="meta-label">Term</div><div class="meta-value">${getTermLabel()}</div></div>
-</div>
-
-<!-- MARKS TABLE -->
-<table class="marks-table">
-  <thead><tr>
-    <th>Subject</th>
-    <th class="center">Score</th>
-    <th class="center">Out of</th>
-    <th>Remarks</th>
-  </tr></thead>
-  <tbody>
-    ${subjects.map((s, i) => `
-    <tr>
-      <td class="subj-name">${s.subject_name}</td>
-      <td class="score-cell" style="color:${primaryScoreColor(s.score)}">${s.score}</td>
-      <td class="out-cell">100</td>
-      <td class="remark-cell" style="color:${primaryScoreColor(s.score)}">${primaryRemarks(s.score)}</td>
-    </tr>`).join('')}
-  </tbody>
-</table>
-
-<!-- SUMMARY BAR -->
-<div class="summary-bar">
-  <div class="sum-cell"><div class="sum-label">Total Score</div><div class="sum-value">${summary.total_score}</div></div>
-  <div class="sum-cell"><div class="sum-label">Average</div><div class="sum-value">${parseFloat(summary.average_score).toFixed(1)}%</div></div>
-  <div class="sum-cell"><div class="sum-label">Position</div><div class="sum-value">${summary.position ?? '—'} / ${totalPupils}</div></div>
-</div>
-
-${isP7 ? `
-<div class="ple-section">
-  <span class="ple-label">UNEB PLE Grade (P7):</span>
-  <span class="grade-chip" style="${gradeStyle(summary.uneb_grade)}">${summary.uneb_grade}</span>
-  <span style="font-size:11px;color:#555;margin-left:8px">Based on best 4 subjects</span>
-</div>` : ''}
-
-<!-- COMMENTS — left completely blank for handwriting -->
-<div class="comment-section">
-  <div class="comment-label">Class Teacher's Comment:</div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="sig-row">Signature: <span class="sig-line"></span></div>
-
-  <div class="comment-label">Head Teacher's Comment:</div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="comment-line"></div>
-  <div class="sig-row">Signature: <span class="sig-line"></span></div>
-</div>
-
-<!-- FINANCE — balance & fees left blank for manual entry; dates from admin term settings -->
-<div class="finance-section">
-  <div class="finance-row">
-    <div class="finance-item"><span class="finance-label">This term's balance:</span><span class="finance-val"></span></div>
-    <div class="finance-item"><span class="finance-label">Next term's fees:</span><span class="finance-val"></span></div>
-  </div>
-  <div class="finance-row">
-    <div class="finance-item"><span class="finance-label">This term ended on:</span><span class="finance-val">${getEndDate()}</span></div>
-    <div class="finance-item"><span class="finance-label">Next term begins on:</span><span class="finance-val">${getNextTermStart()}</span></div>
-  </div>
-</div>
-
-<div class="doc-footer">Hill View Primary School — Report Management System &nbsp;|&nbsp; ${new Date().getFullYear()}</div>
-</body></html>`);
-			w.document.close();
-		}
-
-		// ══════════════════════════════════════════════════
-		//  DOM HELPERS
-		// ══════════════════════════════════════════════════
-		function e(tag, attrs, ...kids) {
-			const el = document.createElement(tag);
-			for (const [k, v] of Object.entries(attrs || {})) {
-				if (k === 'class') el.className = v;
-				else if (k === 'style') el.style.cssText = v;
-				else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
-				else el.setAttribute(k, v);
-			}
-			kids.flat().forEach(c => {if (c != null) el.append(typeof c === 'string' ? c : c);});
-			return el;
-		}
-		const d = (cls, st, ...ch) => e('div', {class: cls || '', style: st || ''}, ...ch);
-		const mkSB = v => {const s = e('span', {class: `sb ${scoreClass(v)}`}); s.textContent = v; return s;};
-		const mkPosB = p => {const s = e('span', {class: `pb ${p === 1 ? 'pb-1' : p <= 3 ? 'pb-2' : 'pb-n'}`}); s.textContent = `#${p}`; return s;};
-
-		// ══════════════════════════════════════════════════
-		//  MARKS TABLE COMPONENT (Excel-style)
-		// ══════════════════════════════════════════════════
-		function MarksTable(classId, readOnly) {
-			const subs = classSubs(classId);
-			const ranked = rankPupils(classId);
-			const cls = S.classes.find(c => c.id === classId);
-			const p7 = cls && isP7Class(cls.name);
-			const isTeacher = S.user.role === 'teacher';
-
-			if (!subs.length && !ranked.length) {
-				const msg = d('empty');
-				msg.textContent = 'No pupils or subjects configured for this class.';
-				return msg;
-			}
-			if (!subs.length) {const msg = d('empty'); msg.textContent = 'No subjects configured for this level.'; return msg;}
-
-			const wrap = d('excel-wrap');
-			const tbl = document.createElement('table');
-			tbl.className = 'excel-table';
-
-			// thead
-			const thead = document.createElement('thead'), hr = document.createElement('tr');
-			const thN = e('th', {class: 'sticky-col'}); thN.textContent = 'Pupil'; thN.style.minWidth = '140px'; hr.appendChild(thN);
-			subs.forEach(s => {
-				const th = document.createElement('th');
-				th.textContent = s.name.length > 14 ? s.name.slice(0, 12) + '…' : s.name;
-				th.title = s.name; th.style.textAlign = 'center'; hr.appendChild(th);
-			});
-			['Avg', 'Pos', ...(p7 ? ['Grade'] : []), ''].forEach(h => {
-				const th = document.createElement('th'); th.textContent = h; th.style.textAlign = 'center'; hr.appendChild(th);
-			});
-			thead.appendChild(hr); tbl.appendChild(thead);
-
-			// tbody
-			const tbody = document.createElement('tbody');
-			if (!ranked.length) {
-				const emptyTr = document.createElement('tr');
-				const emptyTd = e('td', {colspan: String(subs.length + 4 + (p7 ? 1 : 0)), style: 'text-align:center;color:var(--muted);padding:18px'});
-				emptyTd.textContent = 'No pupils yet. Add the first pupil below.';
-				emptyTr.appendChild(emptyTd); tbody.appendChild(emptyTr);
-			}
-			ranked.forEach(p => {
-				const tr = document.createElement('tr');
-				const tdN = e('td', {class: 'sticky-col'}); tdN.textContent = p.name; tr.appendChild(tdN);
-
-				subs.forEach(s => {
-					const td = e('td', {style: 'text-align:center'});
-					const val = getScore(p.id, s.id);
-					if (readOnly) {td.appendChild(mkSB(val));}
-					else {
-						const hasPending = S.pending[markKey(p.id, s.id)] !== undefined;
-						const inp = e('input', {type: 'number', min: '0', max: '100', step: '1', value: val, class: 'inline-num', style: hasPending ? 'border-color:var(--warn);background:#fffbf0' : ''});
-						inp.addEventListener('input', ev => {
-							setPending(p.id, s.id, ev.target.value);
-							inp.style.borderColor = 'var(--warn)'; inp.style.background = '#fffbf0';
-						});
-						td.appendChild(inp);
-					}
-					tr.appendChild(td);
-				});
-
-				// avg
-				const tdA = e('td', {style: 'text-align:center'});
-				const avgEl = e('strong', {id: `avg-${p.id}`, style: 'color:var(--g)'}); avgEl.textContent = p.avg.toFixed(1); tdA.appendChild(avgEl); tr.appendChild(tdA);
-				// pos
-				const tdP = e('td', {id: `pos-${p.id}`, style: 'text-align:center'}); tdP.appendChild(mkPosB(p.pos)); tr.appendChild(tdP);
-				// P7 grade
-				if (p7) {
-					const tdG = e('td', {id: `grade-${p.id}`, style: 'text-align:center'});
-					const pd = pleCalc(p.id, classId);
-					const gs = e('span', {class: 'grade-b', style: gradeStyle(pd.grade)}); gs.textContent = pd.grade; tdG.appendChild(gs); tr.appendChild(tdG);
-				}
-				// print btn
-				const tdB = e('td', {style: 'text-align:center'});
-				const btn = e('button', {class: 'btn btn-ghost btn-sm'}); btn.textContent = 'Print';
-				btn.addEventListener('click', () => {
-					const sum = {
-						pupil_name: p.name, class_name: cls?.name || '',
-						total_score: p.total, average_score: p.avg,
-						position: p.pos, uneb_grade: p7 ? pleCalc(p.id, classId).grade : null
-					};
-					const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
-					printReport(sum, subjs);
-				}); tdB.appendChild(btn); tr.appendChild(tdB);
-				tbody.appendChild(tr);
-			});
-
-			// Add-pupil row — shown for teachers (not read-only) AND for admin in marks view
-			if (!readOnly) {
-				const addTr = document.createElement('tr');
-				addTr.className = 'add-pupil-row';
-				const addTd = e('td', {colspan: String(subs.length + 4 + (p7 ? 1 : 0))});
-				const form = d('inline-form', 'margin:2px 0');
-				const nameIn = e('input', {type: 'text', placeholder: '+ Type pupil name and click Add…', style: 'max-width:280px'});
-				const addBtn = e('button', {class: 'btn btn-primary btn-sm', type: 'button'}); addBtn.textContent = 'Add Pupil';
-				const doAdd = async () => {
-					const nm = nameIn.value.trim(); if (!nm) return;
-					addBtn.disabled = true; addBtn.textContent = 'Adding…';
-					const err = await addPupil(nm, classId);
-					if (err) {addBtn.disabled = false; addBtn.textContent = 'Add Pupil'; alert('Error: ' + err);}
-				};
-				nameIn.addEventListener('keydown', ev => {if (ev.key === 'Enter') doAdd();});
-				addBtn.addEventListener('click', doAdd);
-				form.appendChild(nameIn); form.appendChild(addBtn); addTd.appendChild(form); addTr.appendChild(addTd);
-				tbody.appendChild(addTr);
-			}
-
-			tbl.appendChild(tbody); wrap.appendChild(tbl);
-			return wrap;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: ADMIN OVERVIEW
-		// ══════════════════════════════════════════════════
-		function ViewOverview() {
-			const c = d('content');
-			const h = e('h2', {class: 'page-h'}); h.textContent = 'School Overview'; c.appendChild(h);
-
-			// Metrics
-			const teachers = S.submissions.length;
-			const mg = d('mc-grid');
-			[{val: S.pupils.length, lbl: 'Total Pupils'}, {val: S.classes.length, lbl: 'Classes'}, {val: S.classPerf.length ? Number(S.classPerf.reduce((a, r) => a + parseFloat(r.average_score || 0), 0) / S.classPerf.length).toFixed(1) + '%' : '–', lbl: 'School Average'}, {val: S.submissions.length, lbl: 'Teacher Submissions'}]
-				.forEach(({val, lbl}) => {
-					const mc = d('mc');
-					const mv = e('div', {class: 'mc-val'}); mv.textContent = val; mc.appendChild(mv);
-					const ml = e('div', {class: 'mc-lbl'}); ml.textContent = lbl; mc.appendChild(ml); mg.appendChild(mc);
-				}); c.appendChild(mg);
-
-			// Two-col: chart + top pupils
-			const tc = d('two-col');
-
-			const cc = d('card');
-			const ch = e('h3', {class: 'section-h'}); ch.textContent = 'Class averages'; cc.appendChild(ch);
-			const cw = d('', 'position:relative;height:220px');
-			const canvas = e('canvas', {id: 'cls-chart', role: 'img', 'aria-label': 'Bar chart of class averages'}); cw.appendChild(canvas); cc.appendChild(cw); tc.appendChild(cc);
-
-			const topCard = d('card');
-			const th3 = e('h3', {class: 'section-h'}); th3.textContent = 'Top performer per class'; topCard.appendChild(th3);
-			S.classPerf.slice(0, 6).forEach(row => {
-				const r = d('', 'display:flex;align-items:center;gap:10px;margin-bottom:9px');
-				const cn = e('span', {class: 'pill', style: 'min-width:80px;text-align:center'}); cn.textContent = row.class_name; r.appendChild(cn);
-				const nm = e('div', {style: 'flex:1;font-size:13px;font-weight:500'}); nm.textContent = row.best_pupil || '–'; r.appendChild(nm);
-				const av = e('span', {style: 'font-size:12px;font-weight:600;color:var(--g)'}); av.textContent = parseFloat(row.average_score || 0).toFixed(1) + '%'; r.appendChild(av);
-				topCard.appendChild(r);
-			}); tc.appendChild(topCard); c.appendChild(tc);
-
-			// Submission status table
-			const subCard = d('card');
-			const sh = e('h3', {class: 'section-h'}); sh.textContent = 'Teacher submission status'; subCard.appendChild(sh);
-			if (S.submissions.length) {
-				const wrap = d('tbl-wrap');
-				const tbl = document.createElement('table');
-				const thead = document.createElement('thead'), hr = document.createElement('tr');
-				['Teacher', 'Class', 'Subjects Entered', 'Progress'].forEach(h2 => {const th = document.createElement('th'); th.textContent = h2; hr.appendChild(th);});
-				thead.appendChild(hr); tbl.appendChild(thead);
-				const tbody = document.createElement('tbody');
-				S.submissions.forEach(row => {
-					const tr = document.createElement('tr');
-					const pct = row.subject_count > 0 ? Math.round((row.subjects_entered / row.subject_count) * 100) : 0;
-					[row.teacher_name, row.class_name, `${row.subjects_entered}/${row.subject_count}`].forEach(txt => {
-						const td = document.createElement('td'); td.textContent = txt; tr.appendChild(td);
-					});
-					const tdP = document.createElement('td');
-					const bar = d('sub-bar'); const fill = d('sub-fill'); fill.style.width = pct + '%'; bar.appendChild(fill);
-					const pctTxt = e('div', {style: 'font-size:11px;color:var(--muted);margin-top:2px'}); pctTxt.textContent = pct + '%'; tdP.appendChild(bar); tdP.appendChild(pctTxt);
-					tr.appendChild(tdP); tbody.appendChild(tr);
-				});
-				tbl.appendChild(tbody); wrap.appendChild(tbl); subCard.appendChild(wrap);
-			} else {
-				const msg = d('empty'); msg.textContent = 'No submission data yet.'; subCard.appendChild(msg);
-			}
-			c.appendChild(subCard);
-
-			// Draw chart after paint
-			requestAnimationFrame(() => setTimeout(() => {
-				if (S.chartInst) {S.chartInst.destroy(); S.chartInst = null;}
-				const ctx = document.getElementById('cls-chart'); if (!ctx) return;
-				S.chartInst = new Chart(ctx, {
-					type: 'bar',
-					data: {
-						labels: S.classPerf.map(r => r.class_name),
-						datasets: [{label: 'Average', data: S.classPerf.map(r => parseFloat(r.average_score || 0)), backgroundColor: 'rgba(26,107,60,.72)', borderColor: '#1a6b3c', borderWidth: 1}]
-					},
-					options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {min: 0, max: 100, ticks: {color: '#6b7b6b'}, grid: {color: 'rgba(0,0,0,.05)'}}, x: {ticks: {color: '#6b7b6b', maxRotation: 45}, grid: {display: false}}}}
-				});
-			}, 60));
-			return c;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: CLASS MARKS (admin + teacher)
-		// ══════════════════════════════════════════════════
-		function ViewMarks() {
-			const isAdmin = S.user.role === 'admin';
-			const classId = isAdmin ? (S.selClass || S.classes[0]?.id) : S.user.class_id;
-			const cls = S.classes.find(c => c.id === classId);
-			const hasPending = Object.keys(S.pending).length > 0;
-
-			const c = d('content');
-			const hdr = d('hdr-row');
-			const h = e('h2', {class: 'page-h', style: 'margin-bottom:0'}); h.textContent = isAdmin ? 'Class Marks' : `${cls?.name || ''} — Marks`; hdr.appendChild(h);
-
-			if (isAdmin) {
-				const sel = e('select', {style: 'width:auto'});
-				S.classes.forEach(cl => {const o = e('option', {value: cl.id}); o.textContent = cl.name; if (cl.id === classId) o.selected = true; sel.appendChild(o);});
-				sel.addEventListener('change', ev => {S.selClass = ev.target.value; S.pending = {}; render();});
-				hdr.appendChild(sel);
-			}
-
-			const pills = d('', 'display:flex;gap:7px;flex-wrap:wrap');
-			if (cls) {const p = e('span', {class: 'pill'}); p.textContent = resolveLevel(cls.name).toUpperCase(); pills.appendChild(p);}
-			const pc = e('span', {class: 'pill pill-grey'}); pc.textContent = `${S.pupils.filter(p => p.class_id === classId).length} pupils`; pills.appendChild(pc);
-			const sc = e('span', {class: 'pill pill-grey'}); sc.textContent = `${classSubs(classId).length} subjects`; pills.appendChild(sc);
-			if (hasPending) {const ch = e('span', {class: 'pill', style: 'background:#fff3cd;color:#7a5300'}); ch.innerHTML = `${Object.keys(S.pending).length} unsaved change${Object.keys(S.pending).length > 1 ? 's' : ''}`; pills.appendChild(ch);}
-			hdr.appendChild(pills); c.appendChild(hdr);
-
-			// Save actions
-			const acts = d('marks-actions');
-			const saveBtn = e('button', {class: 'btn btn-primary', onclick: saveMarks});
-			saveBtn.disabled = S.saving || !hasPending;
-			saveBtn.innerHTML = S.saving ? '<span class="spin"></span> Saving…' : 'Save Marks';
-			acts.appendChild(saveBtn);
-			if (S.saveMsg) {
-				const msg = e('span', {class: S.saveMsg.startsWith('Error') ? 'msg-err' : 'msg-ok'}); msg.textContent = S.saveMsg; acts.appendChild(msg);
-			}
-			c.appendChild(acts);
-
-			const card = d('card'); card.appendChild(MarksTable(classId, false)); c.appendChild(card);
-			return c;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: TEACHER SUMMARY
-		// ══════════════════════════════════════════════════
-		function ViewSummary() {
-			const classId = S.user.class_id;
-			const cls = S.classes.find(c => c.id === classId);
-			const ranked = rankPupils(classId);
-			const clsAvg = ranked.length ? (ranked.reduce((a, p) => a + p.avg, 0) / ranked.length).toFixed(1) : '–';
-
-			const c = d('content');
-			const h = e('h2', {class: 'page-h'}); h.textContent = `${cls?.name || ''} — Summary`; c.appendChild(h);
-			const mg = d('mc-grid', 'grid-template-columns:repeat(3,minmax(0,1fr))');
-			[{val: S.pupils.filter(p => p.class_id === classId).length, lbl: 'Pupils'}, {val: clsAvg + '%', lbl: 'Class average'}, {val: ranked[0] ? ranked[0].avg.toFixed(1) + '%' : '–', lbl: 'Top score'}]
-				.forEach(({val, lbl}) => {const mc = d('mc'); const mv = e('div', {class: 'mc-val'}); mv.textContent = val; mc.appendChild(mv); const ml = e('div', {class: 'mc-lbl'}); ml.textContent = lbl; mc.appendChild(ml); mg.appendChild(mc);});
-			c.appendChild(mg);
-			const card = d('card'); const sh = e('h3', {class: 'section-h'}); sh.textContent = 'Rankings'; card.appendChild(sh);
-			card.appendChild(MarksTable(classId, true)); c.appendChild(card);
-			return c;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: ADMIN ALL CLASSES
-		// ══════════════════════════════════════════════════
-		function ViewAllClasses() {
-			const c = d('content');
-			const h = e('h2', {class: 'page-h'}); h.textContent = 'All Classes'; c.appendChild(h);
-			const grid = d('', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px');
-			S.classes.forEach(cls => {
-				const pups = S.pupils.filter(p => p.class_id === cls.id);
-				const subs = classSubs(cls.id);
-				const perf = S.classPerf.find(r => r.class_id === cls.id);
-				const card = d('card');
-				const top = d('', 'display:flex;align-items:center;gap:12px;margin-bottom:12px');
-				const av = e('div', {style: 'width:38px;height:38px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--g);flex-shrink:0'}); av.textContent = cls.name.slice(0, 2); top.appendChild(av);
-				const inf = d(''); const nm = e('div', {style: 'font-size:14px;font-weight:700'}); nm.textContent = cls.name; inf.appendChild(nm);
-				const lv = e('div', {style: 'font-size:12px;color:var(--muted)'}); lv.textContent = resolveLevel(cls.name); inf.appendChild(lv); top.appendChild(inf); card.appendChild(top);
-				const pills = d('', 'display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px');
-				const p1 = e('span', {class: 'pill'}); p1.textContent = `${pups.length} pupils`; pills.appendChild(p1);
-				const p2 = e('span', {class: 'pill pill-grey'}); p2.textContent = `${subs.length} subjects`; pills.appendChild(p2);
-				if (perf) {const p3 = e('span', {class: 'pill pill-grey'}); p3.textContent = `Avg ${parseFloat(perf.average_score || 0).toFixed(1)}%`; pills.appendChild(p3);}
-				card.appendChild(pills);
-				const btn = e('button', {class: 'btn btn-ghost btn-sm'}); btn.textContent = 'Edit marks →';
-				btn.addEventListener('click', () => {S.selClass = cls.id; S.view = 'marks'; render();});
-				card.appendChild(btn); grid.appendChild(card);
-			}); c.appendChild(grid);
-			return c;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  BULK REPORT GENERATION
-		// ══════════════════════════════════════════════════
-		function showProgressOverlay(label, current, total) {
-			let ov = document.getElementById('progress-overlay');
-			if (!ov) {
-				ov = d('progress-overlay'); ov.id = 'progress-overlay';
-				const box = d('progress-box');
-				const h3 = e('h3'); h3.id = 'prog-label'; box.appendChild(h3);
-				const barWrap = d('progress-bar-wrap'); const fill = d('progress-bar-fill'); fill.id = 'prog-fill'; barWrap.appendChild(fill); box.appendChild(barWrap);
-				const pct = e('div', {style: 'font-size:12px;color:var(--muted);margin-top:4px'}); pct.id = 'prog-pct'; box.appendChild(pct);
-				const cancelBtn = e('button', {class: 'btn btn-ghost btn-sm', style: 'margin-top:14px'}); cancelBtn.textContent = 'Cancel'; cancelBtn.id = 'prog-cancel';
-				cancelBtn.addEventListener('click', () => {S._bulkCancel = true; removeProgressOverlay();});
-				box.appendChild(cancelBtn); ov.appendChild(box); document.body.appendChild(ov);
-			}
-			document.getElementById('prog-label').textContent = label;
-			const pct2 = total > 0 ? Math.round((current / total) * 100) : 0;
-			document.getElementById('prog-fill').style.width = pct2 + '%';
-			document.getElementById('prog-pct').textContent = `${current} / ${total} (${pct2}%)`;
-		}
-		function removeProgressOverlay() {const ov = document.getElementById('progress-overlay'); if (ov) ov.remove();}
-
-		async function generateReportsForClass(classId) {
-			const cls = S.classes.find(c => c.id === classId); if (!cls) return;
-			const subs = classSubs(classId);
-			const ranked = rankPupils(classId);
-			const p7 = isP7Class(cls.name);
-			S._bulkCancel = false;
-			for (let i = 0; i < ranked.length; i++) {
-				if (S._bulkCancel) break;
-				const p = ranked[i];
-				showProgressOverlay(`Printing ${cls.name} reports…`, i + 1, ranked.length);
-				await new Promise(res => setTimeout(res, 120));
-				const sum = {pupil_name: p.name, class_name: cls.name, total_score: p.total, average_score: p.avg, position: p.pos, uneb_grade: p7 ? pleCalc(p.id, classId).grade : null};
-				const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
-				printReport(sum, subjs);
-				await new Promise(res => setTimeout(res, 350));
-			}
-			removeProgressOverlay();
-		}
-
-		async function generateAllReports() {
-			S._bulkCancel = false;
-			const allPupils = [];
-			S.classes.forEach(cls => {
-				const subs = classSubs(cls.id);
-				const ranked = rankPupils(cls.id);
-				const p7 = isP7Class(cls.name);
-				ranked.forEach(p => allPupils.push({p, cls, subs, p7}));
-			});
-			for (let i = 0; i < allPupils.length; i++) {
-				if (S._bulkCancel) break;
-				const {p, cls, subs, p7} = allPupils[i];
-				showProgressOverlay(`Printing all reports (${cls.name})…`, i + 1, allPupils.length);
-				await new Promise(res => setTimeout(res, 120));
-				const sum = {pupil_name: p.name, class_name: cls.name, total_score: p.total, average_score: p.avg, position: p.pos, uneb_grade: p7 ? pleCalc(p.id, cls.id).grade : null};
-				const subjs = subs.map(s => ({subject_name: s.name, score: getScore(p.id, s.id)}));
-				printReport(sum, subjs);
-				await new Promise(res => setTimeout(res, 350));
-			}
-			removeProgressOverlay();
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: ADMIN REPORTS (uses DB views)
-		// ══════════════════════════════════════════════════
-		function ViewReports() {
-			const c = d('content');
-			const h = e('h2', {class: 'page-h'}); h.textContent = 'Report Cards'; c.appendChild(h);
-
-			if (!S.reportPupils.length) {
-				const msg = d('empty'); msg.textContent = 'Loading pupils…'; c.appendChild(msg);
-				loadReportPupils(); return c;
-			}
-
-			// ── Bulk generate bar ──
-			const bar = d('bulk-bar');
-			const barLabel = e('strong'); barLabel.textContent = `${S.reportPupils.length} pupils across ${S.classes.length} classes`; bar.appendChild(barLabel);
-
-			// Per-class buttons
-			const clsWrap = d('', 'display:flex;gap:7px;flex-wrap:wrap;align-items:center');
-			const clsLbl = e('span', {style: 'font-size:12px;color:var(--muted);font-weight:600'}); clsLbl.textContent = 'Print by class:'; clsWrap.appendChild(clsLbl);
-			S.classes.forEach(cls => {
-				const pups = S.pupils.filter(p => p.class_id === cls.id);
-				if (!pups.length) return;
-				const cb = e('button', {class: 'btn btn-ghost btn-sm'});
-				cb.textContent = cls.name;
-				cb.addEventListener('click', () => generateReportsForClass(cls.id));
-				clsWrap.appendChild(cb);
-			});
-			bar.appendChild(clsWrap);
-
-			const allBtn = e('button', {class: 'btn btn-primary btn-sm'});
-			allBtn.innerHTML = '🖨 Print All Reports';
-			allBtn.addEventListener('click', generateAllReports);
-			bar.appendChild(allBtn);
-			c.appendChild(bar);
-
-			const layout = d('', 'display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:start');
-			layout.className = 'report-layout';
-			layout.style.cssText = 'display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:start';
-
-			// sidebar pupil list
-			const aside = d('', 'background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px;max-height:70vh;overflow-y:auto');
-			aside.className = 'report-aside';
-			const ah = e('h4', {style: 'font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px'}); ah.textContent = 'Pupils'; aside.appendChild(ah);
-			let lastCls = '';
-			S.reportPupils.forEach(p => {
-				if (p.class_name !== lastCls) {
-					const grp = e('div', {style: 'font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px;padding-left:4px'}); grp.textContent = p.class_name; aside.appendChild(grp); lastCls = p.class_name;
-				}
-				const itm = e('button', {class: 'nav-item' + (p.pupil_id === S.reportSelId ? ' active' : ''), style: 'padding:7px 12px;border-radius:var(--r);border-left:3px solid transparent'});
-				itm.textContent = p.pupil_name;
-				itm.addEventListener('click', async () => {S.reportSummary = null; S.reportSubjects = []; render(); await loadReportForPupil(p.pupil_id);});
-				aside.appendChild(itm);
-			}); layout.appendChild(aside);
-
-			// report card
-			const main = d('');
-			if (!S.reportSummary) {const ld = d('loader'); ld.innerHTML = `<div class="spin"></div>&ensp;Loading report…`; main.appendChild(ld);}
-			else {
-				const rc = d('report-card');
-				const topBtns = d('', 'display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap');
-				const printBtn = e('button', {class: 'btn btn-ghost btn-sm no-print'});
-				printBtn.innerHTML = '🖨 Print / PDF';
-				printBtn.addEventListener('click', () => printReport(S.reportSummary, S.reportSubjects));
-				topBtns.appendChild(printBtn);
-
-				// Print whole class from report view
-				if (S.reportSummary) {
-					const thisCls = S.classes.find(c => c.name === S.reportSummary.class_name);
-					if (thisCls) {
-						const clsPrintBtn = e('button', {class: 'btn btn-ghost btn-sm no-print'});
-						clsPrintBtn.textContent = `Print all ${S.reportSummary.class_name}`;
-						clsPrintBtn.addEventListener('click', () => generateReportsForClass(thisCls.id));
-						topBtns.appendChild(clsPrintBtn);
-					}
-				}
-				rc.appendChild(topBtns);
-
-				const rh = e('h1'); rh.textContent = 'Hill View Primary School'; rc.appendChild(rh);
-				const rs = e('div', {class: 'sub'}); rs.textContent = 'Academic Report Card | Term 2, 2025'; rc.appendChild(rs);
-				const meta = d('report-meta');
-				[{val: S.reportSummary.pupil_name, lbl: 'Pupil'}, {val: S.reportSummary.class_name, lbl: 'Class'}, {val: S.reportSummary.position ?? '–', lbl: 'Position'}]
-					.forEach(({val, lbl}) => {const div2 = document.createElement('div'); const sp = e('span'); sp.textContent = lbl; const st = e('strong'); st.textContent = val; div2.appendChild(sp); div2.appendChild(st); meta.appendChild(div2);});
-				rc.appendChild(meta);
-				const tbl = document.createElement('table');
-				const thead = document.createElement('thead'), hr = document.createElement('tr');
-				['Subject', 'Score', '/ 100', 'Remarks'].forEach(h2 => {const th = document.createElement('th'); th.textContent = h2; if (h2 !== 'Subject') th.style.textAlign = 'center'; hr.appendChild(th);});
-				thead.appendChild(hr); tbl.appendChild(thead);
-				const tbody = document.createElement('tbody');
-				S.reportSubjects.forEach(s => {
-					const tr = document.createElement('tr');
-					const cls2 = scoreClass(s.score);
-					const colorMap = {'sb-a': '#0a4f24', 'sb-b': '#0a3a6b', 'sb-c': '#7a5300', 'sb-f': '#c0392b'};
-					[s.subject_name, s.score, '100', scoreLabel(s.score)].forEach((txt, i) => {
-						const td = document.createElement('td'); td.textContent = txt;
-						if (i === 1 || i === 2) td.style.textAlign = 'center';
-						if (i === 1 || i === 3) td.style.color = colorMap[cls2];
-						if (i === 1) td.style.fontWeight = '700';
-						tr.appendChild(td);
-					}); tbody.appendChild(tr);
-				});
-				tbl.appendChild(tbody); rc.appendChild(tbl);
-				const smeta = d('report-meta', 'margin-top:16px');
-				[{val: S.reportSummary.total_score, lbl: 'Total'}, {val: parseFloat(S.reportSummary.average_score).toFixed(1) + '%', lbl: 'Average'}, {val: S.reportSummary.uneb_grade ?? 'N/A', lbl: 'UNEB Grade'}]
-					.forEach(({val, lbl}) => {const div2 = document.createElement('div'); const sp = e('span'); sp.textContent = lbl; const st = e('strong'); if (lbl === 'UNEB Grade' && S.reportSummary.uneb_grade) {st.style.cssText = gradeStyle(S.reportSummary.uneb_grade) + 'padding:4px 14px;border-radius:20px;';} st.textContent = val; div2.appendChild(sp); div2.appendChild(st); smeta.appendChild(div2);});
-				rc.appendChild(smeta);
-				main.appendChild(rc);
-			}
-			layout.appendChild(main); c.appendChild(layout);
-			return c;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  VIEW: ADMIN SETTINGS
-		// ══════════════════════════════════════════════════
-		function ViewSettings() {
-			const c = d('content');
-			const h = e('h2', {class: 'page-h'}); h.textContent = 'Term Settings'; c.appendChild(h);
-
-			const sub = e('p', {style: 'font-size:13px;color:var(--muted);margin-bottom:20px;max-width:480px'});
-			sub.textContent = 'These values are printed on every report card automatically. Set them once per term before generating reports.';
-			c.appendChild(sub);
-
-			const card = d('settings-card');
-
-			// ── Term label ──────────────────────────────────
-			const g1 = d('settings-group');
-			const l1 = e('label', {class: 'settings-label'}); l1.textContent = 'Current Term'; g1.appendChild(l1);
-			const i1 = e('input', {
-				type: 'text', class: 'settings-input',
-				placeholder: 'e.g.  Term 2, 2025',
-				value: S.termSettings.termLabel
-			});
-			i1.addEventListener('input', ev => {S.termSettings.termLabel = ev.target.value;});
-			const h1 = e('p', {class: 'settings-hint'}); h1.textContent = 'Appears on the report header and position row.';
-			g1.appendChild(i1); g1.appendChild(h1); card.appendChild(g1);
-
-			// ── End date ────────────────────────────────────
-			const g2 = d('settings-group');
-			const l2 = e('label', {class: 'settings-label'}); l2.textContent = 'Term End Date'; g2.appendChild(l2);
-			const i2 = e('input', {
-				type: 'date', class: 'settings-input',
-				value: S.termSettings.endDate
-			});
-			i2.addEventListener('input', ev => {S.termSettings.endDate = formatDate(ev.target.value);});
-			const h2 = e('p', {class: 'settings-hint'}); h2.textContent = 'Printed as "This term ended on:" at the bottom of every report.';
-			g2.appendChild(i2); g2.appendChild(h2); card.appendChild(g2);
-
-			// ── Next term start ─────────────────────────────
-			const g3 = d('settings-group');
-			const l3 = e('label', {class: 'settings-label'}); l3.textContent = 'Next Term Opening Date'; g3.appendChild(l3);
-			const i3 = e('input', {
-				type: 'date', class: 'settings-input',
-				value: S.termSettings.nextTermStart
-			});
-			i3.addEventListener('input', ev => {S.termSettings.nextTermStart = formatDate(ev.target.value);});
-			const h3 = e('p', {class: 'settings-hint'}); h3.textContent = 'Printed as "Next term begins on:" at the bottom of every report.';
-			g3.appendChild(i3); g3.appendChild(h3); card.appendChild(g3);
-
-			// ── Save button ─────────────────────────────────
-			const btnRow = d('', 'display:flex;align-items:center;margin-top:8px');
-			const saveBtn = e('button', {class: 'btn btn-primary'});
-			saveBtn.textContent = 'Save Settings';
-			saveBtn.addEventListener('click', async () => {
-				saveBtn.disabled = true;
-				saveBtn.innerHTML = '<span class="spin"></span>&ensp;Saving…';
-				await saveTermSettings();
-				saveBtn.disabled = false;
-				saveBtn.textContent = 'Save Settings';
-			});
-			btnRow.appendChild(saveBtn);
-			if (S.termSettings.settingsMsg === 'saved') {
-				const ok = e('span', {class: 'settings-saved'}); ok.textContent = '✓ Saved'; btnRow.appendChild(ok);
-			}
-			card.appendChild(btnRow);
-			c.appendChild(card);
-
-			// ── Preview panel ────────────────────────────────
-			const prev = d('settings-card', 'margin-top:20px;background:var(--gl)');
-			const ph = e('h3', {style: 'font-size:13px;font-weight:700;color:var(--g);margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em'});
-			ph.textContent = 'Preview — what will print on reports';
-			prev.appendChild(ph);
-			[
-				['Term label', getTermLabel() || '—'],
-				['This term ended on', getEndDate() || '—'],
-				['Next term begins on', getNextTermStart() || '—'],
-			].forEach(([label, val]) => {
-				const row = d('', 'display:flex;align-items:baseline;gap:10px;margin-bottom:8px;font-size:13px');
-				const lbl = e('span', {style: 'color:var(--muted);font-weight:600;min-width:180px'}); lbl.textContent = label + ':'; row.appendChild(lbl);
-				const vl = e('span', {style: 'font-weight:700;color:var(--text)'}); vl.textContent = val; row.appendChild(vl);
-				prev.appendChild(row);
-			});
-			c.appendChild(prev);
-
-			return c;
-		}
-
-		// Format date from <input type=date> (YYYY-MM-DD) → readable (e.g. 15th August 2025)
-		function formatDate(iso) {
-			if (!iso) return '';
-			const [y, m, d2] = iso.split('-').map(Number);
-			const months = ['January', 'February', 'March', 'April', 'May', 'June',
-				'July', 'August', 'September', 'October', 'November', 'December'];
-			const suffix = d2 === 1 || d2 === 21 || d2 === 31 ? 'st' : d2 === 2 || d2 === 22 ? 'nd' : d2 === 3 || d2 === 23 ? 'rd' : 'th';
-			return `${d2}${suffix} ${months[m - 1]} ${y}`;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  LOGIN SCREEN
-		// ══════════════════════════════════════════════════
-		function renderLogin(errMsg) {
-			const root = document.getElementById('app'); root.innerHTML = '';
-			const wrap = d('login-wrap');
-			const card = d('login-card');
-
-			const lw = d('login-logo');
-			lw.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
-			card.appendChild(lw);
-			const h1 = e('h1', {class: 'login-h1'}); h1.textContent = 'Hill View Primary School'; card.appendChild(h1);
-			const sub = e('p', {class: 'login-sub'}); sub.textContent = 'Report Management System'; card.appendChild(sub);
-			if (errMsg) {const eb = d('err-box'); eb.textContent = errMsg; card.appendChild(eb);}
-
-			const ef = d('field'); const el2 = e('label'); el2.textContent = 'Email'; ef.appendChild(el2);
-			const ei = e('input', {type: 'email', id: 'lemail', placeholder: 'your@email.com', autocomplete: 'email'}); ef.appendChild(ei); card.appendChild(ef);
-			const pf = d('field'); const pl = e('label'); pl.textContent = 'Password'; pf.appendChild(pl);
-			const pi = e('input', {type: 'password', id: 'lpw', placeholder: '••••••••', autocomplete: 'current-password'}); pf.appendChild(pi); card.appendChild(pf);
-
-			const btn = e('button', {class: 'btn btn-primary', style: 'width:100%;justify-content:center;margin-top:4px'}); btn.textContent = 'Sign in'; card.appendChild(btn);
-			const doSI = async () => {
-				btn.disabled = true; btn.innerHTML = '<span class="spin"></span>&ensp;Signing in…';
-				const err = await signIn(ei.value.trim(), pi.value);
-				if (err) {btn.disabled = false; btn.textContent = 'Sign in'; renderLogin(err);}
-			};
-			btn.addEventListener('click', doSI);
-			pi.addEventListener('keydown', ev => {if (ev.key === 'Enter') doSI();});
-
-			wrap.appendChild(card); root.appendChild(wrap); ei.focus();
-		}
-
-		// ══════════════════════════════════════════════════
-		//  NAVBAR + SIDEBAR
-		// ══════════════════════════════════════════════════
-		function renderNavbar() {
-			const nav = e('nav', {class: 'navbar'});
-			nav.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
-			const t = e('span', {class: 'nav-brand'}); t.textContent = 'Hill View Primary School'; nav.appendChild(t);
-			const u = e('span', {class: 'nav-user'}); u.textContent = S.user.name; nav.appendChild(u);
-			const r = e('span', {class: 'badge-role'}); r.textContent = S.user.role; nav.appendChild(r);
-			const lo = e('button', {class: 'btn-signout', onclick: signOut}); lo.textContent = 'Sign out'; nav.appendChild(lo);
-			return nav;
-		}
-
-		// ══════════════════════════════════════════════════
-		//  MAIN RENDER
-		// ══════════════════════════════════════════════════
-		function render() {
-			const root = document.getElementById('app'); root.innerHTML = '';
-			if (!S.user) {renderLogin(); return;}
-			if (S.loading) {
-				const app = d('', 'display:flex;flex-direction:column;min-height:100vh');
-				app.appendChild(renderNavbar());
-				const ld = d('loader'); ld.innerHTML = `<div class="spin"></div>&ensp;Loading…`; app.appendChild(ld);
-				root.appendChild(app); return;
-			}
-
-			const app = d('', 'display:flex;flex-direction:column;min-height:100vh');
-			app.appendChild(renderNavbar());
-			const ml = d('main');
-			const isAdmin = S.user.role === 'admin';
-
-			let navItems, contentEl;
-			if (isAdmin) {
-				navItems = [
-					{id: 'overview', label: 'Overview', icon: '<rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/>'},
-					{id: 'marks', label: 'Class Marks', icon: '<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-					{id: 'classes', label: 'All Classes', icon: '<rect x="1" y="3" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 14v2M11 14v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-					{id: 'reports', label: 'Reports', icon: '<path d="M3 2h10l3 3v13H3V2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-					{id: 'settings', label: 'Settings', icon: '<circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M11.5 3.1l-1.4 1.4M3.1 11.5l1.4 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'},
-				];
-				if (S.view === 'overview') contentEl = ViewOverview();
-				else if (S.view === 'marks') contentEl = ViewMarks();
-				else if (S.view === 'classes') contentEl = ViewAllClasses();
-				else if (S.view === 'settings') contentEl = ViewSettings();
-				else contentEl = ViewReports();
-			} else {
-				navItems = [
-					{id: 'marks', label: 'Enter Marks', icon: '<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-					{id: 'summary', label: 'Summary', icon: '<path d="M2 12l5-5 4 4 5-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'},
-				];
-				contentEl = S.view === 'summary' ? ViewSummary() : ViewMarks();
-			}
-
-			const sb = e('aside', {class: 'sidebar'});
-			navItems.forEach(({id, label, icon}) => {
-				const btn = e('button', {class: 'nav-item' + (S.view === id ? ' active' : '')});
-				btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 16 16" fill="none">${icon}</svg><span>${label}</span>`;
-				btn.addEventListener('click', () => {
-					if (id === 'reports' && !S.reportPupils.length) {S.view = id; S.reportSummary = null; render(); loadReportPupils();}
-					else {S.view = id; render();}
-				}); sb.appendChild(btn);
-			});
-
-			ml.appendChild(sb); ml.appendChild(contentEl); app.appendChild(ml); root.appendChild(app);
-		}
-
-		// ══════════════════════════════════════════════════
-		//  BOOT
-		// ══════════════════════════════════════════════════
-		(async function boot() {
-			const {data: {session}} = await db.auth.getSession();
-			if (session) {
-				// 'users' table — not 'profiles' — matches actual hill-view-ps schema
-				const {data: u} = await db.from('users').select('id,name,email,role,class_id').eq('id', session.user.id).single();
-				if (u) {S.user = u; S.view = u.role === 'admin' ? 'overview' : 'marks'; await loadAll(); return;}
-			}
-			S.loading = false; render();
-			db.auth.onAuthStateChange(ev => {
-				if (ev === 'SIGNED_OUT') {Object.assign(S, {user: null, loading: false, classes: [], subjects: [], pupils: [], marksMap: {}, classPerf: [], submissions: [], selClass: null, pending: {}, reportPupils: [], reportSelId: null, reportSummary: null, reportSubjects: []}); render();}
-			});
-		})();
-	</script>
+  ${isGraded?`<div class="ple"><h3>UNEB PLE Grade (P7)</h3><span class="grade-chip" style="${gradeStyle(summary.uneb_grade)}">${summary.uneb_grade}</span></div>`:''}
+  ${sharedFooter()}
+  </body></html>`);
+  }
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════
+//  GENERATE ALL REPORTS (admin — one window, all pupils)
+// ══════════════════════════════════════════════════
+async function generateAllReports(filterClass) {
+  // Collect all pupils to include
+  const pupils = filterClass
+    ? S.pupils.filter(p=>p.class_id===filterClass)
+    : S.pupils;
+  if(!pupils.length){alert('No pupils to generate reports for.');return;}
+
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>All Reports — Hill View</title>
+  <style>
+    .page{max-width:720px;margin:0 auto;padding:32px 28px;page-break-after:always}
+    .page:last-child{page-break-after:auto}
+    h1{font-size:22px;text-align:center;color:#1a6b3c;margin-bottom:3px}
+    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:18px}
+    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:16px}
+    .meta div{font-size:13px}.meta strong{display:block;font-size:17px;font-weight:700;color:#1a6b3c}.meta span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
+    th{background:#1a6b3c;color:#fff;padding:8px 11px;text-align:left;font-weight:500;font-size:12px}
+    td{padding:7px 11px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
+    .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
+    .sum div{text-align:center}.sum strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.sum span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
+    .grade-chip{display:inline-block;padding:4px 16px;border-radius:20px;font-size:15px;font-weight:700}
+    .ple{padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
+    .ple h3{font-size:12px;font-weight:700;color:#1a6b3c;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+    footer{font-size:10px;color:#aaa;text-align:center;padding-top:10px;border-top:1px solid #e0e0e0;margin-top:auto}
+    @media print{.noprint{display:none!important}}
+    .dot{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #1a6b3c;box-sizing:border-box}
+    .dot-filled{background:#1a6b3c}
+    .dot-empty{background:transparent}
+    .scale-key{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px;font-size:11px;color:#555}
+    .scale-key .k-item{display:flex;align-items:center;gap:5px}
+    .scale-key strong{color:#1a6b3c;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
+    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:18px}
+    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:16px}
+    .meta div{font-size:13px}.meta strong{display:block;font-size:17px;font-weight:700;color:#1a6b3c}.meta span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
+    th{background:#1a6b3c;color:#fff;padding:8px 11px;text-align:left;font-weight:500;font-size:12px}
+    td{padding:7px 11px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
+    .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
+    .sum div{text-align:center}.sum strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.sum span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
+    .grade-chip{display:inline-block;padding:4px 16px;border-radius:20px;font-size:15px;font-weight:700}
+    .ple{padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
+    .ple h3{font-size:12px;font-weight:700;color:#1a6b3c;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+    footer{font-size:10px;color:#aaa;text-align:center;padding-top:10px;border-top:1px solid #e0e0e0;margin-top:auto}
+    @media print{.noprint{display:none!important}}
+  </style></head><body>
+  <div class="noprint" style="position:sticky;top:0;background:#1a6b3c;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:16px;z-index:99">
+    <strong style="flex:1">Hill View — All Reports (${pupils.length} pupils)</strong>
+    <button onclick="window.print()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:7px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Print All / Save PDF</button>
+  </div>`);
+
+  pupils.forEach(p=>{
+    const cls  = S.classes.find(c=>c.id===p.class_id);
+    const subs = classSubs(p.class_id);
+    const ranked = rankPupils(p.class_id);
+    const rp   = ranked.find(r=>r.id===p.id)||{pos:'-',total:0,avg:0};
+    const isP7 = cls&&isP7Class(cls.name);
+    const rows = subs.map(s=>({name:s.name,v:getScore(p.id,s.id)}));
+    const scoreC = v=>v>=80?'#0a4f24':v>=60?'#0a3a6b':v>=40?'#7a5300':'#c0392b';
+
+    const isNursery = cls && cls.name.startsWith('KG');
+    let pleBlock='';
+
+    if (isNursery) {
+      // Nursery circle-based page
+      const subjectList = subs.map(s => ({ subject_name: s.name, score: getScore(p.id, s.id) }));
+      const dotRows = subjectList.map(s => {
+        const filled = scoreToDots(s.score);
+        return `<tr>
+          <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:13px">${s.subject_name}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center">
+            <div style="display:flex;gap:6px;justify-content:center;align-items:center">
+              ${renderDots(filled)}
+            </div>
+          </td>
+          <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;color:#555">${dotLabel(filled)}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;font-size:13px;font-weight:700;color:#1a6b3c">${s.score}</td>
+        </tr>`;
+      }).join('');
+
+      w.document.write(`<div class="page">
+        <h1>Hill View Primary School</h1>
+        <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
+        <div class="meta">
+          <div><span>Pupil</span><strong>${p.name}</strong></div>
+          <div><span>Class</span><strong>${cls.name}</strong></div>
+          <div><span>Level</span><strong>Nursery</strong></div>
+        </div>
+        <div class="scale-key">
+          <strong>Scale:</strong>
+          ${[1,2,3,4,5].map(n=>`<span class="k-item">${renderDots(n,5)}<span>${n} — ${dotLabel(n)}</span></span>`).join('')}
+        </div>
+        <table><thead><tr>
+          <th>Learning Area</th>
+          <th style="text-align:center">Achievement</th>
+          <th>Level</th>
+          <th style="text-align:center">Score</th>
+        </tr></thead>
+        <tbody>${dotRows}</tbody></table>
+        <footer>Hill View Primary School Report Management System</footer>
+      </div>`);
+      return; // skip the primary report block below
+    }
+    if(isP7){
+      const pd=pleCalc(p.id,p.class_id);
+      const gc=gradeStyle(pd.grade);
+      pleBlock=`<div class="ple"><h3>UNEB PLE</h3>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          ${pd.aggs.map(a=>{const iB=pd.best4.find(b=>b.s.id===a.s.id);return`<div style="font-size:12px;${iB?'font-weight:700;color:#1a6b3c':'color:#aaa'}"><div>${a.s.name}</div><div>${a.sc} → agg ${a.ag}${iB?' ✓':''}</div></div>`;}).join('')}
+          <div style="margin-left:auto"><span style="font-size:12px;color:#777">Total agg:</span> <strong>${pd.tot}</strong> &nbsp;<span class="grade-chip" style="${gc}">Grade ${pd.grade}</span></div>
+        </div></div>`;
+    }
+
+    w.document.write(`<div class="page">
+      <h1>Hill View Primary School</h1>
+      <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
+      <div class="meta">
+        <div><span>Pupil</span><strong>${p.name}</strong></div>
+        <div><span>Class</span><strong>${cls?.name||'–'}</strong></div>
+        <div><span>Position</span><strong>${rp.pos} / ${ranked.length}</strong></div>
+      </div>
+      <table><thead><tr><th>Subject</th><th style="text-align:center">Score</th><th style="text-align:center">/ 100</th><th>Remarks</th></tr></thead>
+      <tbody>${rows.map(({name,v})=>`<tr><td>${name}</td><td style="text-align:center;font-weight:700;color:${scoreC(v)}">${v}</td><td style="text-align:center;color:#999">100</td><td style="color:${scoreC(v)}">${scoreLabel(v)}</td></tr>`).join('')}</tbody></table>
+      <div class="sum">
+        <div><span>Total</span><strong>${rp.total}</strong></div>
+        <div><span>Average</span><strong>${rp.avg.toFixed(1)}%</strong></div>
+        <div><span>Position</span><strong>${rp.pos}/${ranked.length}</strong></div>
+      </div>
+      ${pleBlock}
+      <footer>Hill View Primary School Report Management System</footer>
+    </div>`);
+  });
+
+  w.document.write('</body></html>'); w.document.close();
+}
+
+
+function e(tag,attrs,...kids){
+  const el=document.createElement(tag);
+  for(const[k,v]of Object.entries(attrs||{})){
+    if(k==='class')el.className=v;
+    else if(k==='style')el.style.cssText=v;
+    else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);
+    else el.setAttribute(k,v);
+  }
+  kids.flat().forEach(c=>{if(c!=null)el.append(typeof c==='string'?c:c);});
+  return el;
+}
+const d=(cls,st,...ch)=>e('div',{class:cls||'',style:st||''},...ch);
+const mkSB  = v=>{const s=e('span',{class:`sb ${scoreClass(v)}`});s.textContent=v;return s;};
+const mkPosB= p=>{const s=e('span',{class:`pb ${p===1?'pb-1':p<=3?'pb-2':'pb-n'}`});s.textContent=`#${p}`;return s;};
+
+// ══════════════════════════════════════════════════
+//  EXCEL MARKS TABLE
+//  readOnly=false → editable inputs with live avg/pos
+//  readOnly=true  → badges (summary view)
+//  showAddPupil   → bottom-row add-pupil panel
+// ══════════════════════════════════════════════════
+function MarksTable(classId, readOnly, showAddPupil) {
+  const subs   = classSubs(classId);
+  const ranked = rankPupils(classId);
+  const cls    = S.classes.find(c=>c.id===classId);
+  const p7     = cls && isP7Class(cls.name);
+  const canAdd  = showAddPupil !== false && !readOnly;
+
+  if (!subs.length && !ranked.length) {
+    const msg=d('empty'); msg.textContent='No pupils or subjects found for this class.'; return msg;
+  }
+  if (!subs.length) {
+    const msg=d('empty'); msg.textContent='No subjects configured for this level.'; return msg;
+  }
+
+  // ── outer wrapper
+  const outer = d('');
+
+  // ── excel table
+  const wrap = d('excel-wrap');
+  const tbl  = e('table',{class:'excel-tbl'});
+
+  // ── thead
+  const thead = document.createElement('thead');
+  const hr    = document.createElement('tr');
+  const thN   = e('th',{class:'name-col'}); thN.textContent='Pupil Name'; hr.appendChild(thN);
+  subs.forEach(s=>{
+    const th=document.createElement('th');
+    th.textContent = s.name.length>13 ? s.name.slice(0,11)+'…' : s.name;
+    th.title = s.name; hr.appendChild(th);
+  });
+  const statCols = ['Total','Avg','Pos',...(p7?['Grade']:[]),'Report'];
+  statCols.forEach(h=>{
+    const th=document.createElement('th');
+    th.textContent=h;
+    th.style.background='#d8ead8';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr); tbl.appendChild(thead);
+
+  // ── tbody
+  const tbody = document.createElement('tbody');
+
+  if (!ranked.length) {
+    const tr=document.createElement('tr');
+    const td=e('td',{colspan:String(subs.length+statCols.length+1),style:'padding:20px;text-align:center;color:var(--muted);font-style:italic'});
+    td.textContent='No pupils enrolled yet. Use the panel below to add the first pupil.';
+    tr.appendChild(td); tbody.appendChild(tr);
+  }
+
+  ranked.forEach((p,rowIdx)=>{
+    const tr=document.createElement('tr');
+
+    // name
+    const tdN=e('td',{class:'name-col'});
+    const nameWrap=d('','display:flex;align-items:center;gap:6px');
+    const rowNum=e('span',{style:'font-size:10px;color:var(--muted);min-width:16px;text-align:right'}); rowNum.textContent=rowIdx+1;
+    const nm=e('span'); nm.textContent=p.name; nameWrap.appendChild(rowNum); nameWrap.appendChild(nm); tdN.appendChild(nameWrap); tr.appendChild(tdN);
+
+    // score cells
+    subs.forEach(s=>{
+      const td=e('td',{class:'input-cell'});
+      const val=getScore(p.id,s.id);
+      if(readOnly){
+        td.style.cssText='padding:5px 6px;text-align:center';
+        td.appendChild(mkSB(val));
+      } else {
+        const isPending = S.pending[markKey(p.id,s.id)]!==undefined;
+        const inp=e('input',{
+          type:'number',min:'0',max:'100',step:'1',value:val,
+          class:'xcel-inp'+(isPending?' changed':''),
+          title:`${p.name} — ${s.name}`
+        });
+        inp.addEventListener('focus',()=>inp.select());
+        inp.addEventListener('input',ev=>{
+          inp.classList.add('changed');
+          setPending(p.id,s.id,ev.target.value);
+        });
+        // Tab/Enter navigation to next cell
+        inp.addEventListener('keydown',ev=>{
+          if(ev.key==='Enter'||ev.key==='Tab'){
+            ev.preventDefault();
+            const allInps=[...document.querySelectorAll('.xcel-inp')];
+            const idx=allInps.indexOf(inp);
+            const next=allInps[idx+1]; if(next)next.focus();
+          }
+        });
+        td.appendChild(inp);
+      }
+      tr.appendChild(td);
+    });
+
+    // Total
+    const tdTot=e('td',{class:'stat-col'});
+    const totEl=e('span',{id:`tot-${p.id}`,style:`font-size:13px;font-weight:700;color:${p.avg>=60?'var(--g)':'var(--danger)'}`}); totEl.textContent=p.total; tdTot.appendChild(totEl); tr.appendChild(tdTot);
+
+    // Avg
+    const tdA=e('td',{class:'stat-col'});
+    const avgEl=e('strong',{id:`avg-${p.id}`,style:`color:${p.avg>=60?'var(--g)':'var(--danger)'}`}); avgEl.textContent=p.avg.toFixed(1); tdA.appendChild(avgEl); tr.appendChild(tdA);
+
+    // Pos
+    const tdP=e('td',{id:`pos-${p.id}`,class:'stat-col'}); tdP.appendChild(mkPosB(p.pos)); tr.appendChild(tdP);
+
+    // P7 grade
+    if(p7){
+      const tdG=e('td',{id:`grade-${p.id}`,class:'stat-col'});
+      const pd=pleCalc(p.id,classId);
+      const gs=e('span',{class:'grade-b',style:gradeStyle(pd.grade)}); gs.textContent=pd.grade; tdG.appendChild(gs); tr.appendChild(tdG);
+    }
+
+    // Report btn
+    const tdB=e('td',{class:'act-col'});
+    const btn=e('button',{class:'btn btn-ghost btn-sm'}); btn.textContent='PDF';
+    btn.addEventListener('click',()=>{
+      const sum={pupil_name:p.name,class_name:cls?.name||'',total_score:p.total,average_score:p.avg,position:p.pos,uneb_grade:p7?pleCalc(p.id,classId).grade:null};
+      printReport(sum, subs.map(s=>({subject_name:s.name,score:getScore(p.id,s.id)})));
+    }); tdB.appendChild(btn); tr.appendChild(tdB);
+
+    tbody.appendChild(tr);
+  });
+
+  tbl.appendChild(tbody); wrap.appendChild(tbl); outer.appendChild(wrap);
+
+  // ── Add-pupil panel (bottom of excel block)
+  if(canAdd){
+    const panel=d('add-pupil-panel');
+    const icon=e('span',{style:'font-size:18px;flex-shrink:0'}); icon.textContent='＋';
+    const nameIn=e('input',{type:'text',placeholder:'New pupil full name…',style:'flex:1;max-width:280px'});
+    const addBtn=e('button',{class:'btn btn-primary btn-sm'}); addBtn.textContent='Add Pupil';
+    const msg=e('span',{style:'font-size:12px;color:var(--muted)'});
+
+    const doAdd=async()=>{
+      const nm=nameIn.value.trim(); if(!nm){msg.textContent='Enter a name first.';return;}
+      addBtn.disabled=true; addBtn.innerHTML='<span class="spin"></span>';
+      const err=await addPupil(nm,classId);
+      if(err){msg.textContent='Error: '+err;addBtn.disabled=false;addBtn.textContent='Add Pupil';}
+      else{msg.textContent='';nameIn.value='';nameIn.focus();}
+    };
+    addBtn.addEventListener('click',doAdd);
+    nameIn.addEventListener('keydown',ev=>{if(ev.key==='Enter')doAdd();});
+    panel.appendChild(icon); panel.appendChild(nameIn); panel.appendChild(addBtn); panel.appendChild(msg);
+    outer.appendChild(panel);
+  }
+
+  return outer;
+}
+
+// ══════════════════════════════════════════════════
+//  VIEW: ADMIN OVERVIEW
+// ══════════════════════════════════════════════════
+function ViewOverview() {
+  const c=d('content');
+  const h=e('h2',{class:'page-h'}); h.textContent='School Overview'; c.appendChild(h);
+
+  // Metrics
+  const teachers=S.submissions.length;
+  const mg=d('mc-grid');
+  [{val:S.pupils.length,lbl:'Total Pupils'},{val:S.classes.length,lbl:'Classes'},{val:S.classPerf.length?Number(S.classPerf.reduce((a,r)=>a+parseFloat(r.average_score||0),0)/S.classPerf.length).toFixed(1)+'%':'–',lbl:'School Average'},{val:S.submissions.length,lbl:'Teacher Submissions'}]
+  .forEach(({val,lbl})=>{
+    const mc=d('mc');
+    const mv=e('div',{class:'mc-val'}); mv.textContent=val; mc.appendChild(mv);
+    const ml=e('div',{class:'mc-lbl'}); ml.textContent=lbl; mc.appendChild(ml); mg.appendChild(mc);
+  }); c.appendChild(mg);
+
+  // Two-col: chart + top pupils
+  const tc=d('two-col');
+
+  const cc=d('card');
+  const ch=e('h3',{class:'section-h'}); ch.textContent='Class averages'; cc.appendChild(ch);
+  const cw=d('','position:relative;height:220px');
+  const canvas=e('canvas',{id:'cls-chart',role:'img','aria-label':'Bar chart of class averages'}); cw.appendChild(canvas); cc.appendChild(cw); tc.appendChild(cc);
+
+  const topCard=d('card');
+  const th3=e('h3',{class:'section-h'}); th3.textContent='Top performer per class'; topCard.appendChild(th3);
+  S.classPerf.slice(0,6).forEach(row=>{
+    const r=d('','display:flex;align-items:center;gap:10px;margin-bottom:9px');
+    const cn=e('span',{class:'pill',style:'min-width:80px;text-align:center'}); cn.textContent=row.class_name; r.appendChild(cn);
+    const nm=e('div',{style:'flex:1;font-size:13px;font-weight:500'}); nm.textContent=row.best_pupil||'–'; r.appendChild(nm);
+    const av=e('span',{style:'font-size:12px;font-weight:600;color:var(--g)'}); av.textContent=parseFloat(row.average_score||0).toFixed(1)+'%'; r.appendChild(av);
+    topCard.appendChild(r);
+  }); tc.appendChild(topCard); c.appendChild(tc);
+
+  // Submission status table
+  const subCard=d('card');
+  const sh=e('h3',{class:'section-h'}); sh.textContent='Teacher submission status'; subCard.appendChild(sh);
+  if(S.submissions.length){
+    const wrap=d('tbl-wrap');
+    const tbl=document.createElement('table');
+    const thead=document.createElement('thead'),hr=document.createElement('tr');
+    ['Teacher','Class','Subjects Entered','Progress'].forEach(h2=>{const th=document.createElement('th');th.textContent=h2;hr.appendChild(th);});
+    thead.appendChild(hr); tbl.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    S.submissions.forEach(row=>{
+      const tr=document.createElement('tr');
+      const pct=row.subject_count>0?Math.round((row.subjects_entered/row.subject_count)*100):0;
+      [row.teacher_name,row.class_name,`${row.subjects_entered}/${row.subject_count}`].forEach(txt=>{
+        const td=document.createElement('td'); td.textContent=txt; tr.appendChild(td);
+      });
+      const tdP=document.createElement('td');
+      const bar=d('sub-bar'); const fill=d('sub-fill'); fill.style.width=pct+'%'; bar.appendChild(fill);
+      const pctTxt=e('div',{style:'font-size:11px;color:var(--muted);margin-top:2px'}); pctTxt.textContent=pct+'%'; tdP.appendChild(bar); tdP.appendChild(pctTxt);
+      tr.appendChild(tdP); tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody); wrap.appendChild(tbl); subCard.appendChild(wrap);
+  } else {
+    const msg=d('empty'); msg.textContent='No submission data yet.'; subCard.appendChild(msg);
+  }
+  c.appendChild(subCard);
+
+  // Draw chart after paint
+  requestAnimationFrame(()=>setTimeout(()=>{
+    if(S.chartInst){S.chartInst.destroy();S.chartInst=null;}
+    const ctx=document.getElementById('cls-chart'); if(!ctx)return;
+    S.chartInst=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels:S.classPerf.map(r=>r.class_name),
+        datasets:[{label:'Average',data:S.classPerf.map(r=>parseFloat(r.average_score||0)),backgroundColor:'rgba(26,107,60,.72)',borderColor:'#1a6b3c',borderWidth:1}]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,ticks:{color:'#6b7b6b'},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{color:'#6b7b6b',maxRotation:45},grid:{display:false}}}}
+    });
+  },60));
+  return c;
+}
+
+// ══════════════════════════════════════════════════
+//  VIEW: CLASS MARKS (admin + teacher)
+// ══════════════════════════════════════════════════
+function ViewMarks() {
+  const isAdmin=S.user.role==='admin';
+  const classId=isAdmin?(S.selClass||S.classes[0]?.id):S.user.class_id;
+  const cls=S.classes.find(c=>c.id===classId);
+  const nPending=Object.keys(S.pending).length;
+  const hasPending=nPending>0;
+  const pups=S.pupils.filter(p=>p.class_id===classId);
+  const c=d('content');
+  const hdr=d('hdr-row');
+  const h=e('h2',{class:'page-h',style:'margin-bottom:0'});
+  h.textContent=isAdmin?'Class Marks':`${cls?.name||''} — Enter Marks`; hdr.appendChild(h);
+  if(isAdmin){
+    const sel=e('select',{style:'width:auto'});
+    S.classes.forEach(cl=>{const o=e('option',{value:cl.id});o.textContent=cl.name;if(cl.id===classId)o.selected=true;sel.appendChild(o);});
+    sel.addEventListener('change',ev=>{S.selClass=ev.target.value;S.pending={};S.saveMsg=null;render();});
+    hdr.appendChild(sel);
+  }
+  const pills=d('','display:flex;gap:7px;flex-wrap:wrap;align-items:center');
+  if(cls){const p=e('span',{class:'pill'});p.textContent=resolveLevel(cls.name).toUpperCase();pills.appendChild(p);}
+  const pc=e('span',{class:'pill pill-grey'});pc.textContent=`${pups.length} pupils`;pills.appendChild(pc);
+  const sc=e('span',{class:'pill pill-grey'});sc.textContent=`${classSubs(classId).length} subjects`;pills.appendChild(sc);
+  if(hasPending){const ch=e('span',{class:'pill',style:'background:#fff3cd;color:#7a5300'});ch.innerHTML=`&#9679; ${nPending} unsaved`;pills.appendChild(ch);}
+  hdr.appendChild(pills); c.appendChild(hdr);
+  const acts=d('marks-actions');
+  const saveBtn=e('button',{class:'btn btn-primary'});
+  saveBtn.disabled=S.saving||!hasPending;
+  saveBtn.innerHTML=S.saving?'<span class="spin"></span> Saving...':'Save Marks';
+  saveBtn.addEventListener('click',saveMarks); acts.appendChild(saveBtn);
+  if(!hasPending&&!S.saving){const hint=e('span',{style:'font-size:12px;color:var(--muted)'});hint.textContent='Tab / Enter moves between cells';acts.appendChild(hint);}
+  if(S.saveMsg){const msg=e('span',{class:S.saveMsg.startsWith('Error')?'msg-err':'msg-ok'});msg.textContent=S.saveMsg;acts.appendChild(msg);}
+  c.appendChild(acts);
+  c.appendChild(MarksTable(classId,false,true));
+  return c;
+}
+
+// ══════════════════════════════════════════════════
+//  VIEW: TEACHER SUMMARY
+// ══════════════════════════════════════════════════
+function ViewSummary() {
+  const classId=S.user.class_id;
+  const cls=S.classes.find(c=>c.id===classId);
+  const ranked=rankPupils(classId);
+  const clsAvg=ranked.length?(ranked.reduce((a,p)=>a+p.avg,0)/ranked.length).toFixed(1):'–';
+
+  const c=d('content');
+  const h=e('h2',{class:'page-h'}); h.textContent=`${cls?.name||''} — Summary`; c.appendChild(h);
+  const mg=d('mc-grid','grid-template-columns:repeat(3,minmax(0,1fr))');
+  [{val:S.pupils.filter(p=>p.class_id===classId).length,lbl:'Pupils'},{val:clsAvg+'%',lbl:'Class average'},{val:ranked[0]?ranked[0].avg.toFixed(1)+'%':'–',lbl:'Top score'}]
+  .forEach(({val,lbl})=>{const mc=d('mc');const mv=e('div',{class:'mc-val'});mv.textContent=val;mc.appendChild(mv);const ml=e('div',{class:'mc-lbl'});ml.textContent=lbl;mc.appendChild(ml);mg.appendChild(mc);});
+  c.appendChild(mg);
+  const sh=e('h3',{class:'section-h',style:'margin-top:8px'}); sh.textContent='Pupil Rankings'; c.appendChild(sh);
+  c.appendChild(MarksTable(classId,true,false));
+  return c;
+}
+
+// ══════════════════════════════════════════════════
+//  VIEW: ADMIN ALL CLASSES
+// ══════════════════════════════════════════════════
+function ViewAllClasses() {
+  const c=d('content');
+  const h=e('h2',{class:'page-h'}); h.textContent='All Classes'; c.appendChild(h);
+  const grid=d('','display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px');
+  S.classes.forEach(cls=>{
+    const pups=S.pupils.filter(p=>p.class_id===cls.id);
+    const subs=classSubs(cls.id);
+    const perf=S.classPerf.find(r=>r.class_id===cls.id);
+    const card=d('card');
+    const top=d('','display:flex;align-items:center;gap:12px;margin-bottom:12px');
+    const av=e('div',{style:'width:38px;height:38px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--g);flex-shrink:0'}); av.textContent=cls.name.slice(0,2); top.appendChild(av);
+    const inf=d(''); const nm=e('div',{style:'font-size:14px;font-weight:700'}); nm.textContent=cls.name; inf.appendChild(nm);
+    const lv=e('div',{style:'font-size:12px;color:var(--muted)'}); lv.textContent=resolveLevel(cls.name); inf.appendChild(lv); top.appendChild(inf); card.appendChild(top);
+    const pills=d('','display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px');
+    const p1=e('span',{class:'pill'}); p1.textContent=`${pups.length} pupils`; pills.appendChild(p1);
+    const p2=e('span',{class:'pill pill-grey'}); p2.textContent=`${subs.length} subjects`; pills.appendChild(p2);
+    if(perf){const p3=e('span',{class:'pill pill-grey'}); p3.textContent=`Avg ${parseFloat(perf.average_score||0).toFixed(1)}%`; pills.appendChild(p3);}
+    card.appendChild(pills);
+    const btn=e('button',{class:'btn btn-ghost btn-sm'}); btn.textContent='Edit marks →';
+    btn.addEventListener('click',()=>{S.selClass=cls.id;S.view='marks';render();});
+    card.appendChild(btn); grid.appendChild(card);
+  }); c.appendChild(grid);
+  return c;
+}
+
+// ══════════════════════════════════════════════════
+//  VIEW: ADMIN REPORTS (uses DB views)
+// ══════════════════════════════════════════════════
+function ViewReports() {
+  const c=d('content');
+  const h=e('h2',{class:'page-h'}); h.textContent='Report Cards'; c.appendChild(h);
+
+  // ── GENERATE ALL banner
+  const genBanner=d('card','margin-bottom:20px;background:linear-gradient(135deg,#1a6b3c 0%,#0f4a2a 100%);color:#fff;border:none');
+  const genTop=d('','display:flex;align-items:center;gap:16px;flex-wrap:wrap');
+  const genIcon=e('div',{style:'font-size:28px;flex-shrink:0'}); genIcon.textContent='📋'; genTop.appendChild(genIcon);
+  const genText=d('','flex:1');
+  const genTitle=e('div',{style:'font-size:16px;font-weight:700;margin-bottom:3px'}); genTitle.textContent='Generate All Report Cards'; genText.appendChild(genTitle);
+  const genSub=e('div',{style:'font-size:12px;opacity:.85'}); genSub.textContent='Opens a single printable window with every pupil — one page per report. Use browser Print to export as PDF.'; genText.appendChild(genSub);
+  genTop.appendChild(genText);
+
+  // Class filter select
+  const genSel=e('select',{id:'gen-sel',style:'width:auto;border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;flex-shrink:0'});
+  const optAll=e('option',{value:''}); optAll.textContent='All classes ('+S.pupils.length+' pupils)'; genSel.appendChild(optAll);
+  S.classes.forEach(cls=>{
+    const cnt=S.pupils.filter(p=>p.class_id===cls.id).length;
+    const o=e('option',{value:cls.id}); o.textContent=`${cls.name} (${cnt} pupils)`; genSel.appendChild(o);
+  });
+  genTop.appendChild(genSel);
+
+  const genBtn=e('button',{style:'background:#fff;color:var(--g);border:none;padding:10px 22px;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap'});
+  genBtn.textContent='Generate All';
+  genBtn.addEventListener('click',()=>{
+    const filterVal=genSel.value||null;
+    genBtn.disabled=true; genBtn.textContent='Opening…';
+    generateAllReports(filterVal);
+    setTimeout(()=>{genBtn.disabled=false;genBtn.textContent='Generate All';},1500);
+  });
+  genTop.appendChild(genBtn); genBanner.appendChild(genTop); c.appendChild(genBanner);
+
+  // ── Individual report lookup
+  if(!S.reportPupils.length) {
+    const msg=d('empty'); msg.textContent='Loading pupils…'; c.appendChild(msg);
+    loadReportPupils(); return c;
+  }
+
+  const sectionLabel=e('div',{style:'font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px'}); sectionLabel.textContent='Preview individual report'; c.appendChild(sectionLabel);
+
+  const layout=d('','display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:start');
+
+  // sidebar pupil list
+  const aside=d('','background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px;max-height:70vh;overflow-y:auto');
+  const ah=e('h4',{style:'font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px'}); ah.textContent='Select Pupil'; aside.appendChild(ah);
+  let lastCls='';
+  S.reportPupils.forEach(p=>{
+    if(p.class_name!==lastCls){
+      const grp=e('div',{style:'font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px;padding-left:4px'}); grp.textContent=p.class_name; aside.appendChild(grp); lastCls=p.class_name;
+    }
+    const itm=e('button',{class:'nav-item'+(p.pupil_id===S.reportSelId?' active':''),style:'padding:7px 12px;border-radius:var(--r);border-left:3px solid transparent;font-size:12px'});
+    itm.textContent=p.pupil_name;
+    itm.addEventListener('click',async()=>{S.reportSummary=null;S.reportSubjects=[];render();await loadReportForPupil(p.pupil_id);});
+    aside.appendChild(itm);
+  }); layout.appendChild(aside);
+
+  // report card pane
+  const main=d('');
+  if(!S.reportSummary){
+    const ld=d('loader'); ld.innerHTML='<div class="spin"></div>&ensp;Loading report…'; main.appendChild(ld);
+  } else {
+    const rc=d('report-card');
+    const topBtns=d('','display:flex;gap:8px;margin-bottom:16px');
+    const printBtn=e('button',{class:'btn btn-ghost btn-sm'});
+    printBtn.innerHTML='🖨 Print this report';
+    printBtn.addEventListener('click',()=>printReport(S.reportSummary,S.reportSubjects));
+    topBtns.appendChild(printBtn);
+    const genOneBtn=e('button',{class:'btn btn-primary btn-sm'});
+    genOneBtn.innerHTML='📋 Generate all for '+S.reportSummary.class_name;
+    genOneBtn.addEventListener('click',()=>{
+      const clsId=S.classes.find(c2=>c2.name===S.reportSummary.class_name)?.id||null;
+      generateAllReports(clsId);
+    });
+    topBtns.appendChild(genOneBtn);
+    rc.appendChild(topBtns);
+    const rh=e('h1'); rh.textContent='Hill View Primary School'; rc.appendChild(rh);
+    const rs=e('div',{class:'sub'}); rs.textContent='Academic Report Card | Term 2, 2025'; rc.appendChild(rs);
+    const meta=d('report-meta');
+    [{val:S.reportSummary.pupil_name,lbl:'Pupil'},{val:S.reportSummary.class_name,lbl:'Class'},{val:S.reportSummary.position??'–',lbl:'Position'}]
+    .forEach(({val,lbl})=>{const dv=document.createElement('div');const sp=e('span');sp.textContent=lbl;const st=e('strong');st.textContent=val;dv.appendChild(sp);dv.appendChild(st);meta.appendChild(dv);});
+    rc.appendChild(meta);
+    const tbl=document.createElement('table');
+    const thead=document.createElement('thead'),hr=document.createElement('tr');
+    ['Subject','Score','/ 100','Remarks'].forEach(h2=>{const th=document.createElement('th');th.textContent=h2;if(h2!=='Subject')th.style.textAlign='center';hr.appendChild(th);});
+    thead.appendChild(hr); tbl.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    S.reportSubjects.forEach(s=>{
+      const tr=document.createElement('tr');
+      const cls2=scoreClass(s.score);
+      const colorMap={'sb-a':'#0a4f24','sb-b':'#0a3a6b','sb-c':'#7a5300','sb-f':'#c0392b'};
+      [s.subject_name,s.score,'100',scoreLabel(s.score)].forEach((txt,i)=>{
+        const td=document.createElement('td'); td.textContent=txt;
+        if(i===1||i===2)td.style.textAlign='center';
+        if(i===1||i===3)td.style.color=colorMap[cls2];
+        if(i===1)td.style.fontWeight='700';
+        tr.appendChild(td);
+      }); tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody); rc.appendChild(tbl);
+    const smeta=d('report-meta','margin-top:16px');
+    [{val:S.reportSummary.total_score,lbl:'Total'},{val:parseFloat(S.reportSummary.average_score).toFixed(1)+'%',lbl:'Average'},{val:S.reportSummary.uneb_grade??'N/A',lbl:'UNEB Grade'}]
+    .forEach(({val,lbl})=>{const dv=document.createElement('div');const sp=e('span');sp.textContent=lbl;const st=e('strong');if(lbl==='UNEB Grade'&&S.reportSummary.uneb_grade){st.style.cssText=gradeStyle(S.reportSummary.uneb_grade)+'padding:4px 14px;border-radius:20px;';}st.textContent=val;dv.appendChild(sp);dv.appendChild(st);smeta.appendChild(dv);});
+    rc.appendChild(smeta);
+    main.appendChild(rc);
+  }
+  layout.appendChild(main); c.appendChild(layout);
+  return c;
+}
+
+// ══════════════════════════════════════════════════
+//  LOGIN SCREEN
+// ══════════════════════════════════════════════════
+function renderLogin(errMsg) {
+  const root=document.getElementById('app'); root.innerHTML='';
+  const wrap=d('login-wrap');
+  const card=d('login-card');
+
+  const lw=d('login-logo');
+  lw.innerHTML=`<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
+  card.appendChild(lw);
+  const h1=e('h1',{class:'login-h1'}); h1.textContent='Hill View Primary School'; card.appendChild(h1);
+  const sub=e('p',{class:'login-sub'}); sub.textContent='Report Management System'; card.appendChild(sub);
+  if(errMsg){const eb=d('err-box'); eb.textContent=errMsg; card.appendChild(eb);}
+
+  const ef=d('field'); const el2=e('label'); el2.textContent='Email'; ef.appendChild(el2);
+  const ei=e('input',{type:'email',id:'lemail',placeholder:'your@email.com',autocomplete:'email'}); ef.appendChild(ei); card.appendChild(ef);
+  const pf=d('field'); const pl=e('label'); pl.textContent='Password'; pf.appendChild(pl);
+  const pi=e('input',{type:'password',id:'lpw',placeholder:'••••••••',autocomplete:'current-password'}); pf.appendChild(pi); card.appendChild(pf);
+
+  const btn=e('button',{class:'btn btn-primary',style:'width:100%;justify-content:center;margin-top:4px'}); btn.textContent='Sign in'; card.appendChild(btn);
+  const doSI=async()=>{
+    if(location.protocol==='file:'){
+      renderLogin('Cannot run from file://  —  serve via HTTP:\n\npython3 -m http.server 3000\n\nthen open http://localhost:3000');
+      return;
+    }
+    btn.disabled=true; btn.innerHTML='<span class="spin"></span>&ensp;Signing in…';
+    const err=await signIn(ei.value.trim(),pi.value);
+    if(err){btn.disabled=false;btn.textContent='Sign in';renderLogin(err);}
+  };
+  btn.addEventListener('click',doSI);
+  pi.addEventListener('keydown',ev=>{if(ev.key==='Enter')doSI();});
+
+  wrap.appendChild(card); root.appendChild(wrap); ei.focus();
+}
+
+// ══════════════════════════════════════════════════
+//  NAVBAR + SIDEBAR
+// ══════════════════════════════════════════════════
+function renderNavbar() {
+  const nav=e('nav',{class:'navbar'});
+  nav.innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
+  const t=e('span',{class:'nav-brand'}); t.textContent='Hill View Primary School'; nav.appendChild(t);
+  const u=e('span',{class:'nav-user'}); u.textContent=S.user.name; nav.appendChild(u);
+  const r=e('span',{class:'badge-role'}); r.textContent=S.user.role; nav.appendChild(r);
+  const lo=e('button',{class:'btn-signout',onclick:signOut}); lo.textContent='Sign out'; nav.appendChild(lo);
+  return nav;
+}
+
+// ══════════════════════════════════════════════════
+//  MAIN RENDER
+// ══════════════════════════════════════════════════
+function render() {
+  const root=document.getElementById('app'); root.innerHTML='';
+  if(!S.user){renderLogin();return;}
+  if(S.loading){
+    const app=d('','display:flex;flex-direction:column;min-height:100vh');
+    app.appendChild(renderNavbar());
+    const ld=d('loader'); ld.innerHTML=`<div class="spin"></div>&ensp;Loading…`; app.appendChild(ld);
+    root.appendChild(app); return;
+  }
+
+  const app=d('','display:flex;flex-direction:column;min-height:100vh');
+  app.appendChild(renderNavbar());
+  const ml=d('main');
+  const isAdmin=S.user.role==='admin';
+
+  let navItems, contentEl;
+  if(isAdmin){
+    navItems=[
+      {id:'overview',label:'Overview',   icon:'<rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/>'},
+      {id:'marks',   label:'Class Marks',icon:'<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'classes', label:'All Classes',icon:'<rect x="1" y="3" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 14v2M11 14v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'reports', label:'Reports',    icon:'<path d="M3 2h10l3 3v13H3V2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+    ];
+    if(S.view==='overview') contentEl=ViewOverview();
+    else if(S.view==='marks') contentEl=ViewMarks();
+    else if(S.view==='classes') contentEl=ViewAllClasses();
+    else contentEl=ViewReports();
+  } else {
+    navItems=[
+      {id:'marks',  label:'Enter Marks',icon:'<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'summary',label:'Summary',    icon:'<path d="M2 12l5-5 4 4 5-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'},
+    ];
+    contentEl=S.view==='summary'?ViewSummary():ViewMarks();
+  }
+
+  const sb=e('aside',{class:'sidebar'});
+  navItems.forEach(({id,label,icon})=>{
+    const btn=e('button',{class:'nav-item'+(S.view===id?' active':'')});
+    btn.innerHTML=`<svg width="15" height="15" viewBox="0 0 16 16" fill="none">${icon}</svg><span>${label}</span>`;
+    btn.addEventListener('click',()=>{
+      if(id==='reports'&&!S.reportPupils.length){S.view=id;S.reportSummary=null;render();loadReportPupils();}
+      else{S.view=id;render();}
+    }); sb.appendChild(btn);
+  });
+
+  ml.appendChild(sb); ml.appendChild(contentEl); app.appendChild(ml); root.appendChild(app);
+}
+
+// ══════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════
+(async function boot(){
+  const {data:{session}}=await db.auth.getSession();
+  if(session){
+    // 'users' table — not 'profiles' — matches actual hill-view-ps schema
+    const {data:u}=await db.from('users').select('id,name,email,role,class_id').eq('id',session.user.id).single();
+    if(u){S.user=u;S.view=u.role==='admin'?'overview':'marks';await loadAll();return;}
+  }
+  S.loading=false; render();
+  db.auth.onAuthStateChange(ev=>{
+    if(ev==='SIGNED_OUT'){Object.assign(S,{user:null,loading:false,classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[]});render();}
+  });
+})();
+</script>
 </body>
-
 </html>
