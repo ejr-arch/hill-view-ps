@@ -101,13 +101,9 @@ thead .sticky-col{background:var(--bg)}
 .sub-bar{height:8px;border-radius:20px;background:#e8e8e8;overflow:hidden;margin-top:4px}
 .sub-fill{height:100%;border-radius:20px;background:var(--g);transition:width .4s}
 /* Report card (in-page) */
-.report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:28px;max-width:760px}
-.report-card h1{font-size:22px;font-weight:700;text-align:center;color:var(--g);margin-bottom:4px}
-.report-card .sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:20px}
-.report-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px;background:var(--gl);border-radius:var(--r);margin-bottom:18px}
-.report-meta div{font-size:13px}
-.report-meta strong{display:block;font-size:18px;font-weight:700;color:var(--g)}
-.report-meta span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.report-card{background:transparent;border:none;padding:0;max-width:none}
+.report-preview-wrap{background:#dfe4df;border:1px solid var(--border);border-radius:var(--rl);padding:14px;overflow:auto}
+.report-preview-sheet{width:210mm;min-height:297mm;margin:0 auto;background:#fff;box-shadow:0 10px 28px rgba(0,0,0,.08)}
 /* ── EXCEL TABLE ── */
 .excel-wrap{overflow-x:auto;border:1px solid #c8d8c8;border-radius:var(--r)}
 .excel-tbl{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
@@ -415,250 +411,278 @@ function dotLabel(filled) {
   return labels[Math.min(filled, 4)] || 'Beginning';
 }
 
-// Shared header/footer HTML strings (same as primary report)
-const SHARED_REPORT_CSS = `
-    body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#1a1a1a;padding:0 24px}
-    @media print{.noprint{display:none}}
-    h1{font-size:24px;text-align:center;color:#1a6b3c;margin-bottom:3px}
-    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:22px}
-    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px;background:#f0f8f4;border-radius:8px;margin-bottom:20px}
-    .meta div{font-size:13px}.meta strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.meta span{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.04em}
-    footer{margin-top:24px;padding-top:12px;border-top:1px solid #e0e0e0;font-size:11px;color:#aaa;text-align:center}
+const REPORT_TERM = 'Term 2';
+const REPORT_YEAR = '2025';
+const REPORT_STREAM = 'Main';
+const PRIMARY_REPORT_SUBJECTS = [
+  'English Language','Mathematics','Science','Social Studies',
+  'Religious Education','Local Language','Kiswahili',
+  'Creative Arts','Physical Education','ICT / Computer Studies',
+  'Agriculture','Home Economics'
+];
+const NURSERY_TEMPLATE_ROWS = [
+  ['LANGUAGE DEVELOPMENT','SINGING','RELATES WITH OTHERS'],
+  ['MATHEMATICS','LISTENING','CLEANLINESS'],
+  ['READING','PHYSICAL EDUCATION','TOILET USE'],
+  ['WRITING','LEADERSHIP','PUNCTUALITY'],
+  ['HEALTH','SHADING & DRAWING','ATTENDANCE'],
+  ['SOCIAL DEVELOPMENT','POEMS & RHYTHMS','SHARING']
+];
+
+const REPORT_DOC_CSS = `
+  @page{size:A4;margin:0}
+  *{box-sizing:border-box}
+  body{margin:0;background:#e7ebe7;font-family:Arial,sans-serif;color:#111}
+  .toolbar{padding:12px 16px;background:#1a6b3c;color:#fff;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+  .toolbar strong{flex:1;font-size:13px}
+  .toolbar button{border:none;background:rgba(255,255,255,.18);color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
+  .sheet{width:210mm;min-height:297mm;margin:14px auto;background:#fff;padding:12mm 10mm 10mm;border:1px solid #cfd6cf}
+  .head{text-align:center}
+  .head h1{margin:0;font-size:18px;font-weight:800}
+  .motto{font-size:11px;font-style:italic;margin-top:2px}
+  .tel{font-size:11px;margin-top:3px}
+  .bar{margin:12px 0 10px;background:#1f4275;color:#fff;text-align:center;padding:5px 8px;font-size:13px;font-weight:700;text-transform:uppercase}
+  .lines3,.lines4{display:grid;gap:10px 12px;margin-bottom:8px;font-size:12px}
+  .lines3{grid-template-columns:1fr 1fr 1fr}
+  .lines4{grid-template-columns:1fr 1fr 1fr 1fr}
+  .line-field{white-space:nowrap}
+  .line{display:inline-block;min-width:90px;border-bottom:1px solid #555;height:14px;vertical-align:bottom;padding:0 2px}
+  .key-title{font-size:12px;font-weight:700;margin:8px 0 4px}
+  .key-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:8px;font-size:11px}
+  .key-item{display:flex;align-items:center;gap:7px}
+  .key-dot{width:10px;height:10px;border-radius:50%}
+  .tbl{width:100%;border-collapse:collapse}
+  .tbl th,.tbl td{border:1px solid #727887;padding:5px 6px;font-size:11px;vertical-align:middle}
+  .tbl th{background:#1f4275;color:#fff;font-weight:700}
+  .tbl tbody tr:nth-child(odd) td{background:#d9dfec}
+  .tbl tbody tr:nth-child(even) td{background:#eef1f7}
+  .center{text-align:center}
+  .right{text-align:right}
+  .mark-dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #444}
+  .excellent{background:#f2c500}
+  .verygood{background:#d53636}
+  .good{background:#2e63d1}
+  .poor{background:#18962f}
+  .empty-dot{background:transparent}
+  .grade-box{background:#d9dfec;border:1px solid #8b96b1;padding:6px 8px;margin-bottom:12px}
+  .grade-box .cap{font-size:11px;font-weight:700;margin-bottom:3px}
+  .grade-box table{width:100%;border-collapse:collapse}
+  .grade-box td,.grade-box th{border:none;padding:2px 4px;font-size:10px;text-align:center}
+  .comment{margin-top:10px;font-size:11px}
+  .comment .label{font-weight:700;margin-bottom:2px}
+  .comment .lineblock{border-bottom:1px solid #555;height:18px}
+  .comment .meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+  .footer-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-top:14px;font-size:11px}
+  @media print{body{background:#fff}.toolbar{display:none}.sheet{margin:0;border:none}}
 `;
 
-const sharedHeader = (pupilName, className) => `
-  <h1>Hill View Primary School</h1>
-  <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
-  <div class="meta">
-    <div><span>Pupil</span><strong>${pupilName}</strong></div>
-    <div><span>Class</span><strong>${className}</strong></div>
-    <div><span>Level</span><strong>Nursery</strong></div>
-  </div>
-`;
-
-const sharedFooter = () => `<footer>Generated by Hill View School Report Management System</footer>`;
-
-function nurseryReportHTML(summary, subjects) {
-  const rows = subjects.map(s => {
-    const filled = scoreToDots(s.score);
-    return `<tr>
-      <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:13px">${s.subject_name}</td>
-      <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center">
-        <div style="display:flex;gap:6px;justify-content:center;align-items:center">
-          ${renderDots(filled)}
-        </div>
-      </td>
-      <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;color:#555">${dotLabel(filled)}</td>
-      <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;font-size:13px;font-weight:700;color:#1a6b3c">${s.score}</td>
-    </tr>`;
-  }).join('');
-
-  return `<!DOCTYPE html><html><head><title>Nursery Report — ${summary.pupil_name}</title>
-  <style>
-    ${SHARED_REPORT_CSS}
-    .dot{display:inline-block;width:18px;height:18px;border-radius:50%;border:2px solid #1a6b3c;box-sizing:border-box}
-    .dot-filled{background:#1a6b3c}
-    .dot-empty{background:transparent}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th{background:#1a6b3c;color:#fff;padding:9px 12px;text-align:left;font-weight:500}
-    .scale-key{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;background:#f0f8f4;border-radius:8px;margin-bottom:20px;font-size:12px;color:#555}
-    .scale-key .k-item{display:flex;align-items:center;gap:6px}
-  </style></head><body>
-  <button class="noprint" onclick="window.print()" style="display:block;margin:0 auto 20px;padding:9px 24px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Print / Save as PDF</button>
-  ${sharedHeader(summary.pupil_name, summary.class_name)}
-  <div class="scale-key">
-    <strong style="color:#1a6b3c;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Scale:</strong>
-    ${[1,2,3,4,5].map(n=>`<span class="k-item">${renderDots(n,5)}<span>${n} — ${dotLabel(n)}</span></span>`).join('')}
-  </div>
-  <table>
-    <thead><tr>
-      <th>Learning Area</th>
-      <th style="text-align:center">Achievement</th>
-      <th>Level</th>
-      <th style="text-align:center">Score</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  ${sharedFooter()}
-  </body></html>`;
+function escapeHtml(val) {
+  return String(val ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#39;');
 }
 
-// ══════════════════════════════════════════════════
-//  PRINT REPORT
-// ══════════════════════════════════════════════════
-function printReport(summary, subjects) {
-  const isNursery = summary.class_name && summary.class_name.startsWith('KG');
-  const w = window.open('', '_blank');
+function normalizeLabel(val) {
+  return String(val || '').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
 
-  if (isNursery) {
-    w.document.write(nurseryReportHTML(summary, subjects));
-  } else {
-    const isGraded = !!summary.uneb_grade;
-    w.document.write(`<!DOCTYPE html><html><head><title>Report — ${summary.pupil_name}</title>
-  <style>
-    ${SHARED_REPORT_CSS}
-    table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1a6b3c;color:#fff;padding:9px 12px;text-align:left;font-weight:500}td{padding:8px 12px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
-    ${isGraded?'.ple{margin-top:20px;padding:14px;background:#f0f8f4;border-radius:8px}.ple h3{font-size:13px;font-weight:700;color:#1a6b3c;margin-bottom:10px}.grade-chip{display:inline-block;padding:5px 18px;border-radius:20px;font-size:17px;font-weight:700}':''}
-  </style></head><body>
-  <button class="noprint" onclick="window.print()" style="display:block;margin:0 auto 20px;padding:9px 24px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Print / Save as PDF</button>
-  <h1>Hill View Primary School</h1>
-  <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
-  <div class="meta">
-    <div><span>Pupil</span><strong>${summary.pupil_name}</strong></div>
-    <div><span>Class</span><strong>${summary.class_name}</strong></div>
-    <div><span>Position</span><strong>${summary.position??'–'}</strong></div>
-  </div>
-  <table><thead><tr><th>Subject</th><th style="text-align:center">Score</th><th style="text-align:center">/ 100</th><th>Remarks</th></tr></thead>
-  <tbody>${subjects.map(s=>`<tr><td>${s.subject_name}</td><td style="text-align:center;font-weight:700;color:${s.score>=80?'#0a4f24':s.score>=60?'#0a3a6b':s.score>=40?'#7a5300':'#c0392b'}">${s.score}</td><td style="text-align:center;color:#999">100</td><td style="color:${s.score>=80?'#0a4f24':s.score>=60?'#0a3a6b':s.score>=40?'#7a5300':'#c0392b'}">${scoreLabel(s.score)}</td></tr>`).join('')}</tbody></table>
-  <div class="meta" style="margin-top:16px">
-    <div><span>Total Score</span><strong>${summary.total_score}</strong></div>
-    <div><span>Average</span><strong>${parseFloat(summary.average_score).toFixed(1)}%</strong></div>
-    <div><span>Position</span><strong>${summary.position??'–'}</strong></div>
-  </div>
-  ${isGraded?`<div class="ple"><h3>UNEB PLE Grade (P7)</h3><span class="grade-chip" style="${gradeStyle(summary.uneb_grade)}">${summary.uneb_grade}</span></div>`:''}
-  ${sharedFooter()}
-  </body></html>`);
+function mapSubjectScores(subjects) {
+  const out = {};
+  (subjects || []).forEach(s => { out[normalizeLabel(s.subject_name)] = Number(s.score); });
+  return out;
+}
+
+function pickScore(subjectMap, aliases) {
+  for (const alias of aliases) {
+    const key = normalizeLabel(alias);
+    if (subjectMap[key] != null) return subjectMap[key];
+    const fuzzy = Object.entries(subjectMap).find(([k]) => k.includes(key) || key.includes(k));
+    if (fuzzy) return fuzzy[1];
   }
+  return null;
+}
+
+function scoreBand(score) {
+  if (score == null || Number.isNaN(score)) return 'empty-dot';
+  if (score >= 85) return 'excellent';
+  if (score >= 70) return 'verygood';
+  if (score >= 50) return 'good';
+  return 'poor';
+}
+
+function nurseryCellScore(subjectMap, label) {
+  const s = label.toLowerCase();
+  if (s.includes('language') || s.includes('reading') || s.includes('writing') || s.includes('listening')) return pickScore(subjectMap, ['Language & Literacy', 'English Language']);
+  if (s.includes('mathematics')) return pickScore(subjectMap, ['Mathematics', 'Mathematics & Numeracy']);
+  if (s.includes('physical') || s.includes('health') || s.includes('cleanliness') || s.includes('toilet')) return pickScore(subjectMap, ['Physical Education', 'Physical & Health Education', 'Health']);
+  if (s.includes('singing') || s.includes('drawing') || s.includes('shading') || s.includes('poems') || s.includes('rhythms')) return pickScore(subjectMap, ['Creative Arts']);
+  if (s.includes('social') || s.includes('leadership') || s.includes('punctuality') || s.includes('attendance') || s.includes('sharing') || s.includes('relates')) return pickScore(subjectMap, ['Social Studies', 'Social & Emotional Development']);
+  return null;
+}
+
+function reportGrade(score) {
+  if (score >= 90) return 'D1';
+  if (score >= 80) return 'D2';
+  if (score >= 70) return 'C3';
+  if (score >= 65) return 'C4';
+  if (score >= 60) return 'C5';
+  if (score >= 55) return 'C6';
+  if (score >= 45) return 'P7';
+  if (score >= 40) return 'P8';
+  return 'F9';
+}
+
+function reportOutOf(className) {
+  const cls = S.classes.find(c => c.name === className);
+  return cls ? rankPupils(cls.id).length : '';
+}
+
+function buildNurseryPdfCard(summary, subjects) {
+  const subjectMap = mapSubjectScores(subjects);
+  const rows = NURSERY_TEMPLATE_ROWS.map(([a,b,c]) => `<tr>
+    <td><b>${escapeHtml(a)}</b></td>
+    <td class="center"><span class="mark-dot ${scoreBand(nurseryCellScore(subjectMap,a))}"></span></td>
+    <td><b>${escapeHtml(b)}</b></td>
+    <td class="center"><span class="mark-dot ${scoreBand(nurseryCellScore(subjectMap,b))}"></span></td>
+    <td><b>${escapeHtml(c)}</b></td>
+    <td class="center"><span class="mark-dot ${scoreBand(nurseryCellScore(subjectMap,c))}"></span></td>
+  </tr>`).join('');
+  return `<section class="sheet">
+    <div class="head"><h1>HILL VIEW PRIMARY SCHOOL - NKOOWE</h1><div class="motto">"Strive for the best"</div><div class="tel">Tel: ___________________</div></div>
+    <div class="bar">END OF TERM INDIVIDUAL ASSESSMENT REPORT</div>
+    <div class="lines3">
+      <div class="line-field"><b>Name:</b> <span class="line">${escapeHtml(summary.pupil_name)}</span></div>
+      <div class="line-field"><b>Class:</b> <span class="line">${escapeHtml(summary.class_name)}</span></div>
+      <div class="line-field"><b>Date:</b> <span class="line">${new Date().toLocaleDateString()}</span></div>
+    </div>
+    <div class="key-title">KEY:</div>
+    <div class="key-grid">
+      <div class="key-item"><span class="key-dot excellent"></span>Excellent (85% - 100%)</div>
+      <div class="key-item"><span class="key-dot good"></span>Good (50% - 69%)</div>
+      <div class="key-item"><span class="key-dot verygood"></span>Very Good (70% - 84%)</div>
+      <div class="key-item"><span class="key-dot poor"></span>Needs Improvement (0%-49%)</div>
+    </div>
+    <div class="lines3" style="margin-bottom:10px">
+      <div class="line-field"><b>POSITION:</b> <span class="line">${escapeHtml(summary.position ?? '')}</span></div>
+      <div class="line-field"><b>OUT OF:</b> <span class="line">${escapeHtml(reportOutOf(summary.class_name))}</span></div>
+      <div class="line-field"><b>TERM:</b> <span class="line">${REPORT_TERM}</span></div>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>LEARNING AREA</th><th style="width:36px"></th><th>SKILLS</th><th style="width:36px"></th><th>HABITS</th><th style="width:36px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="comment"><div class="label">Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div></div><div>Signature: ___________________</div></div></div>
+    <div class="comment"><div class="label">Head Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div></div><div>Signature: ___________________</div></div></div>
+    <div class="footer-grid">
+      <div><b>This term's balance:</b> ___________________</div>
+      <div><b>Next term's fees:</b> ___________________</div>
+      <div><b>This term ended on:</b> ___________________</div>
+      <div><b>Next term begins:</b> ___________________</div>
+    </div>
+  </section>`;
+}
+
+function buildPrimaryPdfCard(summary, subjects) {
+  const subjectMap = mapSubjectScores(subjects);
+  const rows = PRIMARY_REPORT_SUBJECTS.map((subject, idx) => {
+    const score = pickScore(subjectMap, [subject]);
+    const has = score != null && !Number.isNaN(score);
+    return `<tr>
+      <td class="center">${idx + 1}</td>
+      <td>${escapeHtml(subject)}</td>
+      <td class="center">${has ? score : ''}</td>
+      <td class="center">${has ? 100 : ''}</td>
+      <td class="center">${has ? reportGrade(score) : ''}</td>
+      <td class="center">${has ? toAgg(score) : ''}</td>
+      <td>${has ? escapeHtml(scoreLabel(score)) : ''}</td>
+    </tr>`;
+  }).join('');
+  const total = Number(summary.total_score) || 0;
+  const average = parseFloat(summary.average_score) || 0;
+  const aggregate = PRIMARY_REPORT_SUBJECTS.reduce((sum, subject) => {
+    const score = pickScore(subjectMap, [subject]);
+    return score == null || Number.isNaN(score) ? sum : sum + toAgg(score);
+  }, 0);
+  return `<section class="sheet">
+    <div class="head"><h1>HILL VIEW PRIMARY SCHOOL - NKOOWE</h1><div class="motto">"Strive for the best"</div><div class="tel">Tel: ___________________</div></div>
+    <div class="bar">END OF TERM ACADEMIC REPORT CARD - PRIMARY SECTION</div>
+    <div class="lines3">
+      <div class="line-field"><b>Name:</b> <span class="line">${escapeHtml(summary.pupil_name)}</span></div>
+      <div class="line-field"><b>Class:</b> <span class="line">${escapeHtml(summary.class_name)}</span></div>
+      <div class="line-field"><b>Stream:</b> <span class="line">${REPORT_STREAM}</span></div>
+    </div>
+    <div class="lines4">
+      <div class="line-field"><b>Term:</b> <span class="line">${REPORT_TERM}</span></div>
+      <div class="line-field"><b>Year:</b> <span class="line">${REPORT_YEAR}</span></div>
+      <div class="line-field"><b>Position:</b> <span class="line">${escapeHtml(summary.position ?? '')}</span></div>
+      <div class="line-field"><b>Out of:</b> <span class="line">${escapeHtml(reportOutOf(summary.class_name))}</span></div>
+    </div>
+    <div class="grade-box">
+      <div class="cap">GRADING SCALE:</div>
+      <table><tbody>
+        <tr><th>D1</th><th>D2</th><th>C3</th><th>C4</th><th>C5</th><th>C6</th><th>P7</th><th>P8</th><th>F9</th></tr>
+        <tr><td>90-100</td><td>80-89</td><td>70-79</td><td>65-69</td><td>60-64</td><td>55-59</td><td>45-54</td><td>40-44</td><td>0-39</td></tr>
+        <tr><td>Distinction</td><td>Distinction</td><td>Credit</td><td>Credit</td><td>Credit</td><td>Credit</td><td>Pass</td><td>Pass</td><td>Fail</td></tr>
+      </tbody></table>
+    </div>
+    <table class="tbl">
+      <thead><tr><th style="width:30px">#</th><th>SUBJECT</th><th style="width:74px">MARKS<br>SCORED</th><th style="width:48px">OUT<br>OF</th><th style="width:44px">GRADE</th><th style="width:40px">AGG</th><th style="width:128px">TEACHER'S REMARKS</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr>
+          <td colspan="2" class="right"><b>TOTAL / AGGREGATE</b></td>
+          <td class="center"><b>${total}</b></td>
+          <td></td>
+          <td class="center"><b>${escapeHtml(summary.uneb_grade || '')}</b></td>
+          <td class="center"><b>${aggregate}</b></td>
+          <td class="center"><b>${average.toFixed(1)}%</b></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="comment"><div class="label">Class Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+    <div class="comment"><div class="label">Head Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+    <div class="comment"><div class="label">Parent / Guardian Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+  </section>`;
+}
+
+function buildReportCardHtml(summary, subjects) {
+  const isNursery = summary.class_name && summary.class_name.startsWith('KG');
+  return isNursery ? buildNurseryPdfCard(summary, subjects) : buildPrimaryPdfCard(summary, subjects);
+}
+
+function openReportWindow(title, label, bodyHtml) {
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>${REPORT_DOC_CSS}</style></head><body><div class="toolbar noprint"><strong>${escapeHtml(label)}</strong><button onclick="window.print()">Print / Save PDF</button></div>${bodyHtml}</body></html>`);
   w.document.close();
 }
 
-// ══════════════════════════════════════════════════
-//  GENERATE ALL REPORTS (admin — one window, all pupils)
-// ══════════════════════════════════════════════════
+function printReport(summary, subjects) {
+  openReportWindow(`Report - ${summary.pupil_name}`, `Hill View Report Card - ${summary.pupil_name}`, buildReportCardHtml(summary, subjects));
+}
+
 async function generateAllReports(filterClass) {
-  // Collect all pupils to include
-  const pupils = filterClass
-    ? S.pupils.filter(p=>p.class_id===filterClass)
-    : S.pupils;
+  const pupils = filterClass ? S.pupils.filter(p=>p.class_id===filterClass) : S.pupils;
   if(!pupils.length){alert('No pupils to generate reports for.');return;}
-
-  const w = window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>All Reports — Hill View</title>
-  <style>
-    .page{max-width:720px;margin:0 auto;padding:32px 28px;page-break-after:always}
-    .page:last-child{page-break-after:auto}
-    h1{font-size:22px;text-align:center;color:#1a6b3c;margin-bottom:3px}
-    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:18px}
-    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:16px}
-    .meta div{font-size:13px}.meta strong{display:block;font-size:17px;font-weight:700;color:#1a6b3c}.meta span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
-    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
-    th{background:#1a6b3c;color:#fff;padding:8px 11px;text-align:left;font-weight:500;font-size:12px}
-    td{padding:7px 11px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
-    .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
-    .sum div{text-align:center}.sum strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.sum span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
-    .grade-chip{display:inline-block;padding:4px 16px;border-radius:20px;font-size:15px;font-weight:700}
-    .ple{padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
-    .ple h3{font-size:12px;font-weight:700;color:#1a6b3c;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
-    footer{font-size:10px;color:#aaa;text-align:center;padding-top:10px;border-top:1px solid #e0e0e0;margin-top:auto}
-    @media print{.noprint{display:none!important}}
-    .dot{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #1a6b3c;box-sizing:border-box}
-    .dot-filled{background:#1a6b3c}
-    .dot-empty{background:transparent}
-    .scale-key{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px;font-size:11px;color:#555}
-    .scale-key .k-item{display:flex;align-items:center;gap:5px}
-    .scale-key strong{color:#1a6b3c;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
-    .sub{text-align:center;font-size:12px;color:#777;margin-bottom:18px}
-    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:16px}
-    .meta div{font-size:13px}.meta strong{display:block;font-size:17px;font-weight:700;color:#1a6b3c}.meta span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
-    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
-    th{background:#1a6b3c;color:#fff;padding:8px 11px;text-align:left;font-weight:500;font-size:12px}
-    td{padding:7px 11px;border-bottom:1px solid #eee}tr:nth-child(even)td{background:#f9f9f9}
-    .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
-    .sum div{text-align:center}.sum strong{display:block;font-size:18px;font-weight:700;color:#1a6b3c}.sum span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.04em}
-    .grade-chip{display:inline-block;padding:4px 16px;border-radius:20px;font-size:15px;font-weight:700}
-    .ple{padding:12px;background:#f0f8f4;border-radius:8px;margin-bottom:14px}
-    .ple h3{font-size:12px;font-weight:700;color:#1a6b3c;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
-    footer{font-size:10px;color:#aaa;text-align:center;padding-top:10px;border-top:1px solid #e0e0e0;margin-top:auto}
-    @media print{.noprint{display:none!important}}
-  </style></head><body>
-  <div class="noprint" style="position:sticky;top:0;background:#1a6b3c;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:16px;z-index:99">
-    <strong style="flex:1">Hill View — All Reports (${pupils.length} pupils)</strong>
-    <button onclick="window.print()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:7px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Print All / Save PDF</button>
-  </div>`);
-
-  pupils.forEach(p=>{
-    const cls  = S.classes.find(c=>c.id===p.class_id);
+  const pages = pupils.map(p => {
+    const cls = S.classes.find(c=>c.id===p.class_id);
     const subs = classSubs(p.class_id);
     const ranked = rankPupils(p.class_id);
-    const rp   = ranked.find(r=>r.id===p.id)||{pos:'-',total:0,avg:0};
-    const isP7 = cls&&isP7Class(cls.name);
-    const rows = subs.map(s=>({name:s.name,v:getScore(p.id,s.id)}));
-    const scoreC = v=>v>=80?'#0a4f24':v>=60?'#0a3a6b':v>=40?'#7a5300':'#c0392b';
-
-    const isNursery = cls && cls.name.startsWith('KG');
-    let pleBlock='';
-
-    if (isNursery) {
-      // Nursery circle-based page
-      const subjectList = subs.map(s => ({ subject_name: s.name, score: getScore(p.id, s.id) }));
-      const dotRows = subjectList.map(s => {
-        const filled = scoreToDots(s.score);
-        return `<tr>
-          <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:13px">${s.subject_name}</td>
-          <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center">
-            <div style="display:flex;gap:6px;justify-content:center;align-items:center">
-              ${renderDots(filled)}
-            </div>
-          </td>
-          <td style="padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;color:#555">${dotLabel(filled)}</td>
-          <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;font-size:13px;font-weight:700;color:#1a6b3c">${s.score}</td>
-        </tr>`;
-      }).join('');
-
-      w.document.write(`<div class="page">
-        <h1>Hill View Primary School</h1>
-        <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
-        <div class="meta">
-          <div><span>Pupil</span><strong>${p.name}</strong></div>
-          <div><span>Class</span><strong>${cls.name}</strong></div>
-          <div><span>Level</span><strong>Nursery</strong></div>
-        </div>
-        <div class="scale-key">
-          <strong>Scale:</strong>
-          ${[1,2,3,4,5].map(n=>`<span class="k-item">${renderDots(n,5)}<span>${n} — ${dotLabel(n)}</span></span>`).join('')}
-        </div>
-        <table><thead><tr>
-          <th>Learning Area</th>
-          <th style="text-align:center">Achievement</th>
-          <th>Level</th>
-          <th style="text-align:center">Score</th>
-        </tr></thead>
-        <tbody>${dotRows}</tbody></table>
-        <footer>Hill View Primary School Report Management System</footer>
-      </div>`);
-      return; // skip the primary report block below
-    }
-    if(isP7){
-      const pd=pleCalc(p.id,p.class_id);
-      const gc=gradeStyle(pd.grade);
-      pleBlock=`<div class="ple"><h3>UNEB PLE</h3>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          ${pd.aggs.map(a=>{const iB=pd.best4.find(b=>b.s.id===a.s.id);return`<div style="font-size:12px;${iB?'font-weight:700;color:#1a6b3c':'color:#aaa'}"><div>${a.s.name}</div><div>${a.sc} → agg ${a.ag}${iB?' ✓':''}</div></div>`;}).join('')}
-          <div style="margin-left:auto"><span style="font-size:12px;color:#777">Total agg:</span> <strong>${pd.tot}</strong> &nbsp;<span class="grade-chip" style="${gc}">Grade ${pd.grade}</span></div>
-        </div></div>`;
-    }
-
-    w.document.write(`<div class="page">
-      <h1>Hill View Primary School</h1>
-      <div class="sub">Academic Report Card &nbsp;|&nbsp; Term 2, 2025</div>
-      <div class="meta">
-        <div><span>Pupil</span><strong>${p.name}</strong></div>
-        <div><span>Class</span><strong>${cls?.name||'–'}</strong></div>
-        <div><span>Position</span><strong>${rp.pos} / ${ranked.length}</strong></div>
-      </div>
-      <table><thead><tr><th>Subject</th><th style="text-align:center">Score</th><th style="text-align:center">/ 100</th><th>Remarks</th></tr></thead>
-      <tbody>${rows.map(({name,v})=>`<tr><td>${name}</td><td style="text-align:center;font-weight:700;color:${scoreC(v)}">${v}</td><td style="text-align:center;color:#999">100</td><td style="color:${scoreC(v)}">${scoreLabel(v)}</td></tr>`).join('')}</tbody></table>
-      <div class="sum">
-        <div><span>Total</span><strong>${rp.total}</strong></div>
-        <div><span>Average</span><strong>${rp.avg.toFixed(1)}%</strong></div>
-        <div><span>Position</span><strong>${rp.pos}/${ranked.length}</strong></div>
-      </div>
-      ${pleBlock}
-      <footer>Hill View Primary School Report Management System</footer>
-    </div>`);
+    const rp = ranked.find(r=>r.id===p.id)||{pos:'-',total:0,avg:0};
+    const isP7 = cls && isP7Class(cls.name);
+    const summary = {
+      pupil_name: p.name,
+      class_name: cls?.name || '',
+      total_score: rp.total,
+      average_score: rp.avg,
+      position: rp.pos,
+      uneb_grade: isP7 ? pleCalc(p.id,p.class_id).grade : null
+    };
+    return buildReportCardHtml(summary, subs.map(s=>({subject_name:s.name,score:getScore(p.id,s.id)})));
   });
-
-  w.document.write('</body></html>'); w.document.close();
+  openReportWindow('All Reports - Hill View', `Hill View - All Reports (${pupils.length} pupils)`, pages.join(''));
 }
 
 
@@ -1071,34 +1095,11 @@ function ViewReports() {
     });
     topBtns.appendChild(genOneBtn);
     rc.appendChild(topBtns);
-    const rh=e('h1'); rh.textContent='Hill View Primary School'; rc.appendChild(rh);
-    const rs=e('div',{class:'sub'}); rs.textContent='Academic Report Card | Term 2, 2025'; rc.appendChild(rs);
-    const meta=d('report-meta');
-    [{val:S.reportSummary.pupil_name,lbl:'Pupil'},{val:S.reportSummary.class_name,lbl:'Class'},{val:S.reportSummary.position??'–',lbl:'Position'}]
-    .forEach(({val,lbl})=>{const dv=document.createElement('div');const sp=e('span');sp.textContent=lbl;const st=e('strong');st.textContent=val;dv.appendChild(sp);dv.appendChild(st);meta.appendChild(dv);});
-    rc.appendChild(meta);
-    const tbl=document.createElement('table');
-    const thead=document.createElement('thead'),hr=document.createElement('tr');
-    ['Subject','Score','/ 100','Remarks'].forEach(h2=>{const th=document.createElement('th');th.textContent=h2;if(h2!=='Subject')th.style.textAlign='center';hr.appendChild(th);});
-    thead.appendChild(hr); tbl.appendChild(thead);
-    const tbody=document.createElement('tbody');
-    S.reportSubjects.forEach(s=>{
-      const tr=document.createElement('tr');
-      const cls2=scoreClass(s.score);
-      const colorMap={'sb-a':'#0a4f24','sb-b':'#0a3a6b','sb-c':'#7a5300','sb-f':'#c0392b'};
-      [s.subject_name,s.score,'100',scoreLabel(s.score)].forEach((txt,i)=>{
-        const td=document.createElement('td'); td.textContent=txt;
-        if(i===1||i===2)td.style.textAlign='center';
-        if(i===1||i===3)td.style.color=colorMap[cls2];
-        if(i===1)td.style.fontWeight='700';
-        tr.appendChild(td);
-      }); tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody); rc.appendChild(tbl);
-    const smeta=d('report-meta','margin-top:16px');
-    [{val:S.reportSummary.total_score,lbl:'Total'},{val:parseFloat(S.reportSummary.average_score).toFixed(1)+'%',lbl:'Average'},{val:S.reportSummary.uneb_grade??'N/A',lbl:'UNEB Grade'}]
-    .forEach(({val,lbl})=>{const dv=document.createElement('div');const sp=e('span');sp.textContent=lbl;const st=e('strong');if(lbl==='UNEB Grade'&&S.reportSummary.uneb_grade){st.style.cssText=gradeStyle(S.reportSummary.uneb_grade)+'padding:4px 14px;border-radius:20px;';}st.textContent=val;dv.appendChild(sp);dv.appendChild(st);smeta.appendChild(dv);});
-    rc.appendChild(smeta);
+    const previewWrap=d('report-preview-wrap');
+    const previewSheet=d('report-preview-sheet');
+    previewSheet.innerHTML=`<style>${REPORT_DOC_CSS}</style>${buildReportCardHtml(S.reportSummary,S.reportSubjects)}`;
+    previewWrap.appendChild(previewSheet);
+    rc.appendChild(previewWrap);
     main.appendChild(rc);
   }
   layout.appendChild(main); c.appendChild(layout);
