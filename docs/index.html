@@ -18,8 +18,8 @@
 		// ══════════════════════════════════════════════════
 		//  CONFIG — matches hill-view-ps Supabase project
 		// ══════════════════════════════════════════════════
-		const SUPA_URL = 'https://gtguutliwmhntuigcqta.supabase.co';
-		const SUPA_KEY = 'sb_publishable_32CnYot-3Kn2ysRljL9-zQ_G5r_QqLI';
+		const SUPA_URL = NEXT_PUBLIC_SUPABASE_URL;
+		const SUPA_KEY = NEXT_PUBLIC_SUPABASE_ANON_KEY;
 		const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 		// ══════════════════════════════════════════════════
@@ -114,7 +114,7 @@
 			return {aggs, best4, tot, grade: pleGrade(tot)};
 		}
 
-// ══════════════════════════════════════════════════
+		// ══════════════════════════════════════════════════
 		//  DATA LOADING
 		// ══════════════════════════════════════════════════
 		async function loadAll() {
@@ -127,80 +127,7 @@
 			const [clsR, subR, pupR] = await Promise.all([
 				db.from('classes').select('id,name').order('name'),
 				db.from('subjects').select('id,name,level').order('name'),
-				db.from('pupils').select('id,name,class_id').order('name'),
-			]);
-			S.classes = clsR.data || [];
-			S.subjects = subR.data || [];
-			S.pupils = pupR.data || [];
-
-			// Marks
-			S.marksMap = {};
-			const pids = S.pupils.map(p => p.id);
-			if (pids.length) {
-				for (let i = 0; i < pids.length; i += 200) {
-					const {data: mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id', pids.slice(i, i + 200));
-					(mks || []).forEach(m => {S.marksMap[markKey(m.pupil_id, m.subject_id)] = m.score;});
-				}
-			}
-
-			// Admin: load views
-			if (S.user.role === 'admin') {
-				const [perfR, subStatusR] = await Promise.all([
-					db.from('class_performance').select('class_id,class_name,average_score,best_pupil,weakest_pupil').order('class_name'),
-					db.from('teacher_submission_status').select('teacher_name,class_name,subjects_entered,subject_count').order('class_name'),
-				]);
-				S.classPerf = perfR.data || [];
-				S.submissions = subStatusR.data || [];
-			}
-
-			// Default selection
-			if (!S.selClass) S.selClass = S.classes[0]?.id || null;
-
-			S.loading = false; S.pending = {}; render();
-		}
-				} catch (err) {
-					console.warn('Web service unavailable, using direct Supabase');
-				}
-			}
-
-			// Admin: try web service overview first if configured
-			if (API_BASE && S.user.role === 'admin') {
-				try {
-					const overview = await apiCall('/api/admin/overview');
-					if (overview) {
-						S.classes = overview.classes || [];
-						S.subjects = [];
-						S.pupils = overview.pupils || [];
-						S.classPerf = overview.classPerf || [];
-						S.submissions = overview.submissions || [];
-						
-						// Also load subject data
-						const {data: subjData} = await db.from('subjects').select('id,name,level').order('name');
-						S.subjects = subjData || [];
-						
-						// Load marks
-						S.marksMap = {};
-						const pids = S.pupils.map(p => p.id);
-						if (pids.length) {
-							for (let i = 0; i < pids.length; i += 200) {
-								const {data: mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id', pids.slice(i, i + 200));
-								(mks || []).forEach(m => {S.marksMap[markKey(m.pupil_id, m.subject_id)] = m.score;});
-							}
-						}
-						
-						S.loading = false; S.pending = {}; render();
-						return;
-					}
-				} catch (err) {
-					console.warn('Web service unavailable, using direct Supabase');
-				}
-			}
-
-			// Fallback to direct Supabase
-			const [clsR, subR, pupR] = await Promise.all([
-				db.from('classes').select('id,name').order('name'),
-				db.from('subjects').select('id,name,level').order('name'),
-				db.from('pupils').select('id,name,class_id').order('name'),
+				db.from('pupils').select('id,name,class_id').order('name'),  // RLS filters teachers
 			]);
 			S.classes = clsR.data || [];
 			S.subjects = subR.data || [];
@@ -233,21 +160,6 @@
 		}
 
 		async function loadReportPupils() {
-			// Try web service first if configured
-			if (API_BASE) {
-				try {
-					const result = await apiCall('/api/reports/pupils');
-					if (result?.pupils) {
-						S.reportPupils = result.pupils || [];
-						if (!S.reportSelId && S.reportPupils.length) S.reportSelId = S.reportPupils[0].pupil_id;
-						if (S.reportSelId) await loadReportForPupil(S.reportSelId);
-						else render();
-						return;
-					}
-				} catch (err) {
-					console.warn('Web service unavailable, using direct Supabase');
-				}
-			}
 			const {data} = await db.from('pupil_report_summary')
 				.select('pupil_id,pupil_name,class_name').order('class_name').order('pupil_name');
 			S.reportPupils = data || [];
@@ -258,22 +170,6 @@
 
 		async function loadReportForPupil(pupilId) {
 			S.reportSelId = pupilId;
-			
-			// Try web service first if configured
-			if (API_BASE) {
-				try {
-					const result = await apiCall(`/api/reports/pupil/${pupilId}`);
-					if (result) {
-						S.reportSummary = result.summary || null;
-						S.reportSubjects = result.subjects || [];
-						render();
-						return;
-					}
-				} catch (err) {
-					console.warn('Web service unavailable, using direct Supabase');
-				}
-			}
-			
 			const [sumR, subjR] = await Promise.all([
 				db.from('pupil_report_summary').select('pupil_id,pupil_name,class_name,total_score,average_score,position,uneb_grade').eq('pupil_id', pupilId).single(),
 				db.from('pupil_report_subjects').select('subject_name,score').eq('pupil_id', pupilId),
@@ -284,7 +180,7 @@
 		}
 
 		// ══════════════════════════════════════════════════
-		//  MARKS SAVE (batch — uses web service when configured)
+		//  MARKS SAVE (batch — matches /api/teacher/marks)
 		// ══════════════════════════════════════════════════
 		async function saveMarks() {
 			const updates = Object.entries(S.pending).map(([k, score]) => {
@@ -293,25 +189,6 @@
 			});
 			if (!updates.length) {S.saveMsg = 'No changes to save.'; render(); return;}
 			S.saving = true; S.saveMsg = null; render();
-			
-			// Try web service first if configured
-			if (API_BASE) {
-				try {
-					await apiCall('/api/teacher/marks', {
-						method: 'POST',
-						body: JSON.stringify({ marks: updates })
-					});
-					updates.forEach(u => {S.marksMap[markKey(u.pupil_id, u.subject_id)] = u.score;});
-					S.pending = {}; S.saveMsg = 'Marks saved successfully.';
-					flashToast();
-					S.saving = false; render();
-					return;
-				} catch (err) {
-					console.warn('Web service unavailable, falling back to direct Supabase:', err.message);
-				}
-			}
-			
-			// Fallback to direct Supabase
 			const {data: {user}} = await db.auth.getUser();
 			const payload = updates.map(u => ({...u, teacher_id: user.id}));
 			const {error} = await db.from('marks').upsert(payload, {onConflict: 'pupil_id,subject_id'});
@@ -325,21 +202,6 @@
 		}
 
 		async function addPupil(name, classId) {
-			// Try web service first if configured
-			if (API_BASE) {
-				try {
-					const result = await apiCall('/api/teacher/pupils', {
-						method: 'POST',
-						body: JSON.stringify({ name })
-					});
-					if (result?.pupil) {
-						S.pupils = [...S.pupils, result.pupil];
-						render(); return null;
-					}
-				} catch (err) {
-					console.warn('Web service unavailable, falling back to direct Supabase:', err.message);
-				}
-			}
 			const {data, error} = await db.from('pupils').insert({name, class_id: classId}).select('id,name,class_id').single();
 			if (error) return error.message;
 			S.pupils = [...S.pupils, data];
