@@ -23,7 +23,13 @@ export default function LoginPage() {
     });
 
     if (authError) {
-      setError(authError.message);
+      if (authError.message.includes("Invalid login")) {
+        setError("Wrong email or password.");
+      } else if (authError.message.includes("Email not confirmed")) {
+        setError("Email not confirmed — check your inbox or disable email confirmation in Supabase Auth settings.");
+      } else {
+        setError("Auth error: " + authError.message);
+      }
       setLoading(false);
       return;
     }
@@ -33,32 +39,43 @@ export default function LoginPage() {
   };
 
   return (
-    <section className="auth-card">
-      <h2>Sign In</h2>
-      <form onSubmit={handleLogin} className="form">
-        <label>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-        <label>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        {error ? <div className="error">{error}</div> : null}
-        <button className="button primary" disabled={loading} type="submit">
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-      </form>
-    </section>
+    <div className="login-wrap">
+      <div className="login-card">
+        <div className="login-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+          </svg>
+        </div>
+        <h1 className="login-h1">Hill View School</h1>
+        <p className="login-sub">Sign in to access reports</p>
+        <form onSubmit={handleLogin}>
+          <div className="field">
+            <label>Email</label>
+            <input
+              type="email"
+              placeholder="teacher@school.ug"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </div>
+          {error ? <div className="err-box">{error}</div> : null}
+          <button className="btn btn-primary" style={{ width: "100%" }} disabled={loading} type="submit">
+            {loading ? <span className="spin"></span> : "Sign In"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }

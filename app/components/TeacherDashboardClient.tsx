@@ -84,58 +84,44 @@ export default function TeacherDashboardClient() {
   }, [router]);
 
   if (loading) {
-    return <p className="muted">Loading teacher dashboard...</p>;
+    return <div className="loader">Loading teacher dashboard...</div>;
   }
 
   if (error || !data) {
-    return <p className="error">{error ?? "Teacher dashboard is unavailable."}</p>;
+    return <div className="msg-err">{error ?? "Teacher dashboard is unavailable."}</div>;
   }
 
   return (
-    <section className="dashboard">
-      <div className="dashboard-header">
-        <div>
-          <h2>Teacher Dashboard</h2>
-          <p>
-            {data.classInfo?.name ?? "Unassigned Class"} | Enter marks and review
-            class performance.
-          </p>
+    <section>
+      <h2 className="page-h">Marks Entry</h2>
+
+      <div className="mc-grid">
+        <div className="mc">
+          <div className="mc-val">{data.classInfo?.name ?? "–"}</div>
+          <div className="mc-lbl">Class</div>
+        </div>
+        <div className="mc">
+          <div className="mc-val">{data.pupils.length}</div>
+          <div className="mc-lbl">Pupils</div>
+        </div>
+        <div className="mc">
+          <div className="mc-val">{data.subjects.length}</div>
+          <div className="mc-lbl">Subjects</div>
+        </div>
+        <div className="mc">
+          <div className="mc-val" style={{ color: data.performance?.average_score && data.performance.average_score >= 60 ? "var(--g)" : "var(--danger)" }}>
+            {data.performance?.average_score?.toFixed(1) ?? "–"}%
+          </div>
+          <div className="mc-lbl">Class Average</div>
         </div>
       </div>
 
-      <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-label">Class Average</div>
-          <div className="stat-value">
-            {data.performance?.average_score?.toFixed(1) ?? "-"}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Best Pupil</div>
-          <div className="stat-value">{data.performance?.best_pupil ?? "-"}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Needs Support</div>
-          <div className="stat-value">
-            {data.performance?.weakest_pupil ?? "-"}
-          </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h3>Enter Marks</h3>
-        <p className="muted">
-          Teacher: {data.user.email} | Class ID: {data.user.classId ?? "none"} |
-          Pupils: {data.pupils.length} | Subjects: {data.subjects.length} |
-          Marks: {data.marks.length}
-        </p>
-        <MarksEntryClient
-          classId={data.user.classId ?? ""}
-          pupils={data.pupils}
-          subjects={data.subjects}
-          marks={data.marks}
-        />
-      </div>
+      <MarksEntryClient
+        classId={data.user.classId ?? ""}
+        pupils={data.pupils}
+        subjects={data.subjects}
+        marks={data.marks}
+      />
     </section>
   );
 }

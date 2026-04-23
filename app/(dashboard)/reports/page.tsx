@@ -26,7 +26,7 @@ export default async function ReportsPage({
   const selectedPupilId = searchParams.pupil ?? pupils?.[0]?.pupil_id;
 
   if (!selectedPupilId) {
-    return <p>No pupil data available.</p>;
+    return <div className="empty">No pupil data available.</div>;
   }
 
   const [{ data: summary }, { data: subjectMarks }] = await Promise.all([
@@ -44,39 +44,34 @@ export default async function ReportsPage({
   ]);
 
   return (
-    <section className="dashboard">
-      <div className="dashboard-header">
-        <div>
-          <h2>Report Cards</h2>
-          <p>Select a pupil to generate a printable report card.</p>
-        </div>
+    <section>
+      <div className="hdr-row">
+        <h2 className="page-h">Report Cards</h2>
         <PrintButton />
       </div>
 
-      <div className="report-layout">
-        <aside>
-          <h4>Pupils</h4>
-          <ul className="pupil-list">
+      <div className="two-col">
+        <div className="card" style={{ padding: "16px" }}>
+          <h3 className="section-h">Select Pupil</h3>
+          <div className="pupil-list-grid">
             {pupils?.map((pupil) => (
-              <li key={pupil.pupil_id}>
-                <a
-                  className={
-                    pupil.pupil_id === selectedPupilId ? "active" : ""
-                  }
-                  href={`/reports?pupil=${pupil.pupil_id}`}
-                >
-                  <span>{pupil.pupil_name}</span>
-                  <small>{pupil.class_name}</small>
-                </a>
-              </li>
+              <a
+                key={pupil.pupil_id}
+                className={pupil.pupil_id === selectedPupilId ? "active" : ""}
+                href={`/reports?pupil=${pupil.pupil_id}`}
+                style={{ display: "flex", flexDirection: "column", gap: "2px" }}
+              >
+                <span style={{ fontWeight: 500 }}>{pupil.pupil_name}</span>
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>{pupil.class_name}</span>
+              </a>
             )) ?? null}
-          </ul>
-        </aside>
+          </div>
+        </div>
         <div>
           {summary ? (
             <ReportCard summary={summary} subjects={subjectMarks ?? []} />
           ) : (
-            <p>No report data for the selected pupil.</p>
+            <div className="empty">No report data for the selected pupil.</div>
           )}
         </div>
       </div>
