@@ -15,10 +15,21 @@ create table if not exists users (
   class_id uuid references classes (id)
 );
 
+-- Teacher can teach multiple classes
+create table if not exists teacher_classes (
+  id uuid primary key default gen_random_uuid(),
+  teacher_id uuid not null references users (id) on delete cascade,
+  class_id uuid not null references classes (id) on delete cascade,
+  unique (teacher_id, class_id)
+);
+
 create table if not exists pupils (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  class_id uuid not null references classes (id) on delete cascade
+  class_id uuid not null references classes (id) on delete cascade,
+  avatar text,
+  house text,
+  paycode text
 );
 
 create table if not exists subjects (
@@ -34,12 +45,24 @@ create table if not exists marks (
   subject_id uuid not null references subjects (id) on delete cascade,
   score integer not null check (score between 0 and 100),
   teacher_id uuid not null references users (id),
+  teacher_comment text,
   unique (pupil_id, subject_id)
 );
 
 create index if not exists idx_pupils_class on pupils (class_id);
 create index if not exists idx_marks_pupil on marks (pupil_id);
 create index if not exists idx_marks_teacher on marks (teacher_id);
+create index if not exists idx_teacher_classes_teacher on teacher_classes (teacher_id);
+create index if not exists idx_teacher_classes_class on teacher_classes (class_id);
+
+-- Nursery report color customization per teacher
+create table if not exists nursery_color_config (
+  id uuid primary key default gen_random_uuid(),
+  teacher_id uuid not null references users (id) on delete cascade,
+  level integer not null check (level between 1 and 5),
+  color text not null,
+  unique (teacher_id, level)
+);
 
 -- Helper functions for RLS
 create or replace function app_user_role()
@@ -55,7 +78,10 @@ returns uuid
 language sql
 stable
 as $$
-  select class_id from users where id = auth.uid();
+  select class_id from users where id = auth.uid() and role = 'admin'
+  union
+  select tc.class_id from teacher_classes tc where tc.teacher_id = auth.uid()
+  limit 1;
 $$;
 
 -- Auto-attach teacher_id for mark inserts
@@ -107,54 +133,80 @@ create policy pupils_admin_all on pupils
   with check (app_user_role() = 'admin');
 
 create policy pupils_teacher_select on pupils
-  for select using (class_id = app_user_class());
+  for select using (
+    app_user_role() = 'teacher'
+    and exists (
+      select 1 from teacher_classes tc
+      where tc.teacher_id = auth.uid()
+        and tc.class_id = pupils.class_id
+    )
+  );
 
 create policy pupils_teacher_insert on pupils
-  for insert with check (class_id = app_user_class());
+  for insert with check (
+    app_user_role() = 'teacher'
+    and exists (
+      select 1 from teacher_classes tc
+      where tc.teacher_id = auth.uid()
+        and tc.class_id = pupils.class_id
+    )
+  );
+
+create policy pupils_teacher_update on pupils
+  for update using (
+    exists (
+      select 1 from teacher_classes tc
+      where tc.teacher_id = auth.uid()
+        and tc.class_id = pupils.class_id
+    )
+  )
+  with check (
+    exists (
+      select 1 from teacher_classes tc
+      where tc.teacher_id = auth.uid()
+        and tc.class_id = pupils.class_id
+    )
+  );
 
 -- Subjects policies
 create policy subjects_read_all on subjects
   for select using (auth.uid() is not null);
+
+-- Teacher Classes policies
+alter table teacher_classes enable row level security;
+
+create policy teacher_classes_admin_all on teacher_classes
+  for all using (app_user_role() = 'admin')
+  with check (app_user_role() = 'admin');
+
+create policy teacher_classes_teacher_select on teacher_classes
+  for select using (teacher_id = auth.uid());
+
+create policy teacher_classes_teacher_insert on teacher_classes
+  for insert with check (teacher_id = auth.uid());
+
+create policy teacher_classes_teacher_delete on teacher_classes
+  for delete using (teacher_id = auth.uid());
+
+-- Nursery Color Config policies
+alter table nursery_color_config enable row level security;
+
+create policy nursery_color_config_admin_all on nursery_color_config
+  for all using (app_user_role() = 'admin')
+  with check (app_user_role() = 'admin');
+
+create policy nursery_color_config_teacher_all on nursery_color_config
+  for all using (teacher_id = auth.uid())
+  with check (teacher_id = auth.uid());
 
 -- Marks policies
 create policy marks_admin_all on marks
   for all using (app_user_role() = 'admin')
   with check (app_user_role() = 'admin');
 
-create policy marks_teacher_select on marks
-  for select using (
-    exists (
-      select 1 from pupils p
-      where p.id = marks.pupil_id
-        and p.class_id = app_user_class()
-    )
-  );
-
-create policy marks_teacher_insert on marks
-  for insert with check (
-    exists (
-      select 1 from pupils p
-      where p.id = marks.pupil_id
-        and p.class_id = app_user_class()
-    )
-  );
-
-create policy marks_teacher_update on marks
-  for update using (
-    teacher_id = auth.uid()
-    and exists (
-      select 1 from pupils p
-      where p.id = marks.pupil_id
-        and p.class_id = app_user_class()
-    )
-  )
-  with check (
-    teacher_id = auth.uid()
-    and exists (
-      select 1 from pupils p
-      where p.id = marks.pupil_id
-        and p.class_id = app_user_class()
-    )
+create policy marks_teacher_all on marks
+  for all using (
+    app_user_role() = 'teacher'
   );
 
 -- Views for analytics and reporting
@@ -165,7 +217,8 @@ select
   c.id as class_id,
   c.name as class_name,
   s.name as subject_name,
-  m.score
+  m.score,
+  m.teacher_comment
 from pupils p
 join classes c on c.id = p.class_id
 join marks m on m.pupil_id = p.id

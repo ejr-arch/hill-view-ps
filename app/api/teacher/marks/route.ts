@@ -6,6 +6,7 @@ type MarkInput = {
   pupil_id: string;
   subject_id: string;
   score: number;
+  teacher_comment?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -37,7 +38,8 @@ export async function POST(request: Request) {
 
   const payload = marks.map((mark) => ({
     ...mark,
-    teacher_id: user.id
+    teacher_id: user.id,
+    teacher_comment: mark.teacher_comment || null
   }));
 
   const { error } = await supabase.from("marks").upsert(payload, {

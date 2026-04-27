@@ -1,0 +1,21 @@
+grade	marks		remark
+D1	90% – 100%	Exceptional
+D2	80% – 89%	Excellent
+C3	75% – 79%	Very Good
+C4	65% – 74%	Good
+C5	60% – 64%	Fairly Good
+C6	50% – 59%	Competent	
+P7	45% – 49%	Pass
+P8	35% – 44%	Weak	
+F9	0% – 34%	Not Achieved
+
+average		comment
+90% – 100%	Demonstrates extraordinary mastery; applies knowledge creatively and innovatively.
+80% – 89%	An outstanding performance; shows high-level competence in practical situations.
+75% – 79%	A very solid achievement; demonstrates strong understanding and consistency.
+65% – 74%	Performance is above average; has a good grasp of the core concepts.
+60% – 64%	Shows satisfactory performance; capable of more with consistent effort.
+50% – 59%	Demonstrates basic competence; needs to focus more on foundational skills.
+45% – 49%	requires more practice to fully grasp complex topics.
+35% – 44%	Limited achievement; needs significant support and regular revision.
+0% – 34%	Needs a fresh approach; extra help and basic concept review are essential.

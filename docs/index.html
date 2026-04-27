@@ -79,6 +79,8 @@ thead .sticky-col{background:var(--bg)}
 .hdr-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .save-toast{position:fixed;bottom:24px;right:24px;background:var(--g);color:#fff;padding:10px 20px;border-radius:var(--r);font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
 .save-toast.show{opacity:1}
+.save-toast.ok{background:var(--g);color:#fff}
+.save-toast.err{background:var(--danger);color:#fff}
 .spin{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--g);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 .loader{display:flex;align-items:center;justify-content:center;flex:1;gap:12px;color:var(--muted);padding:60px}
@@ -90,6 +92,36 @@ thead .sticky-col{background:var(--bg)}
 .inline-form input{flex:1;min-width:180px}
 .marks-actions{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .changed-dot{width:7px;height:7px;border-radius:50%;background:var(--warn);display:inline-block;margin-left:4px;vertical-align:middle}
+/* ── PUPIL/TEACHER MANAGEMENT ── */
+.avatar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px;margin-bottom:16px}
+.avatar-card{text-align:center;border:1px solid var(--border);border-radius:var(--r);padding:10px;cursor:pointer;transition:all .15s;background:var(--surface)}
+.avatar-card:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(26,107,60,.12)}
+.avatar-card.selected{border-color:var(--g);border-width:2px;background:var(--gl)}
+.avatar-img{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:var(--muted);margin:0 auto 6px;overflow:hidden}
+.avatar-img img{width:100%;height:100%;object-fit:cover}
+.avatar-name{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;margin:0 auto}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:all .15s}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--g);background:var(--gl)}
+.upload-zone input{display:none}
+.upload-hint{font-size:12px;color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-full{grid-column:1/-1}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+.form-group input,.form-group select{width:100%}
+.action-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.teach-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px}
+.teach-avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--g);flex-shrink:0;overflow:hidden}
+.teach-avatar img{width:100%;height:100%;object-fit:cover}
+.teach-info{flex:1}
+.teach-name{font-size:15px;font-weight:700}
+.teach-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.teach-class{font-size:12px;color:var(--g);font-weight:600}
+.teach-actions{display:flex;gap:8px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal-box{background:var(--surface);border-radius:var(--rl);padding:24px;width:440px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal-h{font-size:17px;font-weight:700;margin-bottom:16px}
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 /* report print */
 @media print{
   .no-print{display:none!important}
@@ -129,6 +161,14 @@ thead .sticky-col{background:var(--bg)}
 /* responsive */
 @media(max-width:900px){.two-col{grid-template-columns:1fr}.mc-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.sidebar{width:44px}.nav-item span{display:none}.content{padding:14px}}
+@media(max-width:490px){
+  .mc-grid{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .inline-form{flex-direction:column}
+  .inline-form input,.inline-form select{flex:1;min-width:100%}
+  .excel-wrap{font-size:11px}
+  .xcel-inp{width:40px;padding:3px 2px;font-size:11px}
+}
 </style>
 </head>
 <body>
@@ -176,6 +216,15 @@ const S = {
   reportSelId: null,
   reportSummary: null,
   reportSubjects: [],
+  // pupil management
+  pupilsList: [],
+  selPupilClass: null,
+  pupilSearch: '',
+  editingPupil: null,
+  // teacher management
+  teachersList: [],
+  teacherSearch: '',
+  editingTeacher: null,
   // ui
   loading: true,
   chartInst: null,
@@ -189,8 +238,8 @@ const toAgg    = s => s>=90?1:s>=80?2:s>=70?3:s>=60?4:s>=50?5:s>=40?6:s>=30?7:8;
 const pleGrade = t => t===4?'D1':t<=6?'D2':t<=8?'C3':t<=10?'C4':t<=12?'P5':t<=14?'P6':t<=16?'P7':'F9';
 const gradeStyle = g => {
   if(['D1','D2'].includes(g)) return'background:#d1f0dc;color:#0a4f24';
-  if(['C3','C4'].includes(g)) return'background:#d0e8ff;color:#0a3a6b';
-  if(['P5','P6','P7'].includes(g)) return'background:#fff3cd;color:#7a5300';
+  if(['C3','C4','C5','C6'].includes(g)) return'background:#d0e8ff;color:#0a3a6b';
+  if(['P5','P6','P7','P8'].includes(g)) return'background:#fff3cd;color:#7a5300';
   return'background:#fde0e0;color:#7a1111';
 };
 const scoreClass = v => v>=80?'sb-a':v>=60?'sb-b':v>=40?'sb-c':'sb-f';
@@ -249,7 +298,7 @@ async function loadAll() {
   const pids = S.pupils.map(p=>p.id);
   if(pids.length) {
     for(let i=0;i<pids.length;i+=200) {
-      const {data:mks} = await db.from('marks').select('pupil_id,subject_id,score').in('pupil_id',pids.slice(i,i+200));
+      const {data:mks} = await db.from('marks').select('pupil_id,subject_id,score,teacher_comment').in('pupil_id',pids.slice(i,i+200));
       (mks||[]).forEach(m=>{ S.marksMap[markKey(m.pupil_id,m.subject_id)]=m.score; });
     }
   }
@@ -283,7 +332,7 @@ async function loadReportForPupil(pupilId) {
   S.reportSelId=pupilId;
   const [sumR,subjR] = await Promise.all([
     db.from('pupil_report_summary').select('pupil_id,pupil_name,class_name,total_score,average_score,position,uneb_grade').eq('pupil_id',pupilId).single(),
-    db.from('pupil_report_subjects').select('subject_name,score').eq('pupil_id',pupilId),
+    db.from('pupil_report_subjects').select('subject_name,score,teacher_comment').eq('pupil_id',pupilId),
   ]);
   S.reportSummary  = sumR.data||null;
   S.reportSubjects = subjR.data||[];
@@ -299,17 +348,29 @@ async function saveMarks() {
     return{pupil_id,subject_id,score:parseInt(score)||0};
   });
   if(!updates.length){S.saveMsg='No changes to save.';render();return;}
-  S.saving=true; S.saveMsg=null; render();
+  S.saving=true; S.saveMsg='Saving marks to database...'; render();
   const {data:{user}} = await db.auth.getUser();
+  if(!user){S.saving=false;S.saveMsg='Error: Not logged in';render();flashToast('Error: Not logged in', 'err');return;}
   const payload = updates.map(u=>({...u,teacher_id:user.id}));
-  const {error} = await db.from('marks').upsert(payload,{onConflict:'pupil_id,subject_id'});
-  if(error){S.saveMsg='Error: '+error.message;}
-  else{
-    updates.forEach(u=>{ S.marksMap[markKey(u.pupil_id,u.subject_id)]=u.score; });
-    S.pending={}; S.saveMsg='Marks saved successfully.';
-    flashToast();
+  try {
+    const {error, data} = await db.from('marks').upsert(payload,{onConflict:'pupil_id,subject_id'}).select();
+    S.saving=false;
+    if(error){
+      S.saveMsg='Error: '+error.message;
+      flashToast('Error saving marks: ' + error.message, 'err');
+      alert('Save failed: ' + error.message);
+    } else {
+      updates.forEach(u=>{ S.marksMap[markKey(u.pupil_id,u.subject_id)]=u.score; });
+      S.pending={}; S.saveMsg=`Successfully saved ${updates.length} mark(s)!`;
+      flashToast(`Successfully saved ${updates.length} mark(s)!`, 'ok');
+    }
+  } catch(e) {
+    S.saving=false;
+    S.saveMsg='Error: '+e.message;
+    flashToast('Error: ' + e.message, 'err');
+    alert('Save failed: ' + e.message);
   }
-  S.saving=false; render();
+  render();
 }
 
 async function addPupil(name, classId) {
@@ -322,7 +383,7 @@ async function addPupil(name, classId) {
 function setPending(pid, sid, val) {
   const v = Math.max(0,Math.min(100,parseInt(val)||0));
   S.pending[markKey(pid,sid)]=v;
-  // live-update avg/pos in DOM without full re-render
+  // live-update avg/pos/grade/remark in DOM without full re-render
   refreshLiveRow(pid, sid);
 }
 
@@ -331,6 +392,16 @@ function refreshLiveRow(pid, sid) {
   const cid=p.class_id;
   const cls=S.classes.find(c=>c.id===cid);
   const p7=cls&&isP7Class(cls.name);
+
+  // Update grade and remark
+  const score=getScore(pid,sid);
+  const grade=reportGrade(score);
+  const remark=gradeRemark(grade);
+  const gradeEl=document.getElementById(`grade-${pid}-${sid}`);
+  if(gradeEl){gradeEl.innerHTML='';const gs=e('span',{class:'sb',style:gradeStyle(grade)});gs.textContent=grade;gradeEl.appendChild(gs);}
+  const remarkEl=document.getElementById(`remark-${pid}-${sid}`);
+  if(remarkEl){remarkEl.textContent=remark;}
+
   rankPupils(cid).forEach(rp=>{
     const goodColor=rp.avg>=60?'var(--g)':'var(--danger)';
     const te=document.getElementById(`tot-${rp.id}`); if(te){te.textContent=rp.total;te.style.color=goodColor;}
@@ -340,9 +411,14 @@ function refreshLiveRow(pid, sid) {
   });
 }
 
-function flashToast() {
+function flashToast(msg, type) {
   if(S.toastTimer) clearTimeout(S.toastTimer);
-  const t=document.getElementById('toast'); if(t){t.classList.add('show');S.toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
+  const t=document.getElementById('toast');
+  if(t){
+    t.textContent=msg || 'Saved';
+    t.className='save-toast show '+(type || '');
+    S.toastTimer=setTimeout(()=>t.classList.remove('show'),3500);
+  }
 }
 
 // ══════════════════════════════════════════════════
@@ -365,7 +441,8 @@ async function signIn(email,pw) {
 
 async function signOut() {
   await db.auth.signOut();
-  Object.assign(S,{user:null,view:'overview',classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],loading:false,chartInst:null});
+  unsubscribeAll();
+  Object.assign(S,{user:null,view:'overview',classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[],loading:false,chartInst:null});
   render();
 }
 
@@ -526,13 +603,28 @@ function nurseryCellScore(subjectMap, label) {
 function reportGrade(score) {
   if (score >= 90) return 'D1';
   if (score >= 80) return 'D2';
-  if (score >= 70) return 'C3';
+  if (score >= 75) return 'C3';
   if (score >= 65) return 'C4';
   if (score >= 60) return 'C5';
-  if (score >= 55) return 'C6';
+  if (score >= 50) return 'C6';
   if (score >= 45) return 'P7';
-  if (score >= 40) return 'P8';
+  if (score >= 35) return 'P8';
   return 'F9';
+}
+
+function gradeRemark(grade) {
+  const remarks = {
+    'D1': 'Exceptional',
+    'D2': 'Excellent',
+    'C3': 'Very Good',
+    'C4': 'Good',
+    'C5': 'Fairly Good',
+    'C6': 'Competent',
+    'P7': 'Pass',
+    'P8': 'Weak',
+    'F9': 'Not Achieved'
+  };
+  return remarks[grade] || '';
 }
 
 function reportOutOf(className) {
@@ -587,9 +679,13 @@ function buildNurseryPdfCard(summary, subjects) {
 
 function buildPrimaryPdfCard(summary, subjects) {
   const subjectMap = mapSubjectScores(subjects);
+  const commentMap = {};
+  (subjects || []).forEach(s => { if (s.teacher_comment) commentMap[normalizeLabel(s.subject_name)] = s.teacher_comment; });
+
   const rows = PRIMARY_REPORT_SUBJECTS.map((subject, idx) => {
     const score = pickScore(subjectMap, [subject]);
     const has = score != null && !Number.isNaN(score);
+    const comment = escapeHtml(commentMap[normalizeLabel(subject)] || (has ? scoreLabel(score) : ''));
     return `<tr>
       <td class="center">${idx + 1}</td>
       <td>${escapeHtml(subject)}</td>
@@ -597,7 +693,7 @@ function buildPrimaryPdfCard(summary, subjects) {
       <td class="center">${has ? 100 : ''}</td>
       <td class="center">${has ? reportGrade(score) : ''}</td>
       <td class="center">${has ? toAgg(score) : ''}</td>
-      <td>${has ? escapeHtml(scoreLabel(score)) : ''}</td>
+      <td>${comment}</td>
     </tr>`;
   }).join('');
   const total = Number(summary.total_score) || 0;
@@ -736,8 +832,19 @@ function MarksTable(classId, readOnly, showAddPupil) {
     const th=document.createElement('th');
     th.textContent = s.name.length>13 ? s.name.slice(0,11)+'…' : s.name;
     th.title = s.name; hr.appendChild(th);
+    // Grade header
+    const thG=document.createElement('th');
+    thG.textContent='Grade';
+    thG.style.cssText='width:55px;text-align:center';
+    hr.appendChild(thG);
+    // Remark header
+    const thR=document.createElement('th');
+    thR.textContent='Remark';
+    thR.style.cssText='min-width:100px';
+    hr.appendChild(thR);
   });
   const statCols = ['Total','Avg','Pos',...(p7?['Grade']:[]),'Report'];
+  const colCount = 1 + (subs.length * 3) + statCols.length;
   statCols.forEach(h=>{
     const th=document.createElement('th');
     th.textContent=h;
@@ -751,7 +858,7 @@ function MarksTable(classId, readOnly, showAddPupil) {
 
   if (!ranked.length) {
     const tr=document.createElement('tr');
-    const td=e('td',{colspan:String(subs.length+statCols.length+1),style:'padding:20px;text-align:center;color:var(--muted);font-style:italic'});
+    const td=e('td',{colspan:String(colCount),style:'padding:20px;text-align:center;color:var(--muted);font-style:italic'});
     td.textContent='No pupils enrolled yet. Use the panel below to add the first pupil.';
     tr.appendChild(td); tbody.appendChild(tr);
   }
@@ -765,7 +872,7 @@ function MarksTable(classId, readOnly, showAddPupil) {
     const rowNum=e('span',{style:'font-size:10px;color:var(--muted);min-width:16px;text-align:right'}); rowNum.textContent=rowIdx+1;
     const nm=e('span'); nm.textContent=p.name; nameWrap.appendChild(rowNum); nameWrap.appendChild(nm); tdN.appendChild(nameWrap); tr.appendChild(tdN);
 
-    // score cells
+    // score cells + comments
     subs.forEach(s=>{
       const td=e('td',{class:'input-cell'});
       const val=getScore(p.id,s.id);
@@ -784,11 +891,10 @@ function MarksTable(classId, readOnly, showAddPupil) {
           inp.classList.add('changed');
           setPending(p.id,s.id,ev.target.value);
         });
-        // Tab/Enter navigation to next cell
         inp.addEventListener('keydown',ev=>{
           if(ev.key==='Enter'||ev.key==='Tab'){
             ev.preventDefault();
-            const allInps=[...document.querySelectorAll('.xcel-inp')];
+            const allInps=[...document.querySelectorAll('.xcel-inp, .cmt-inp')];
             const idx=allInps.indexOf(inp);
             const next=allInps[idx+1]; if(next)next.focus();
           }
@@ -796,6 +902,20 @@ function MarksTable(classId, readOnly, showAddPupil) {
         td.appendChild(inp);
       }
       tr.appendChild(td);
+
+      // Grade cell
+      const tdG=e('td',{class:'stat-col', id:`grade-${p.id}-${s.id}`});
+      const score=getScore(p.id,s.id);
+      const grade=reportGrade(score);
+      const gs=e('span',{class:'sb',style:gradeStyle(grade)}); gs.textContent=grade; tdG.appendChild(gs);
+      tr.appendChild(tdG);
+
+      // Remark cell
+      const tdR=e('td',{class:'stat-col', id:`remark-${p.id}-${s.id}`});
+      tdR.style.cssText='font-size:11px;color:var(--muted);white-space:nowrap';
+      const remark=gradeRemark(grade);
+      tdR.textContent=remark;
+      tr.appendChild(tdR);
     });
 
     // Total
@@ -959,10 +1079,13 @@ function ViewMarks() {
   hdr.appendChild(pills); c.appendChild(hdr);
   const acts=d('marks-actions');
   const saveBtn=e('button',{class:'btn btn-primary'});
-  saveBtn.disabled=S.saving||!hasPending;
+  saveBtn.style.cssText='min-width:120px;';
+  saveBtn.disabled=S.saving;
   saveBtn.innerHTML=S.saving?'<span class="spin"></span> Saving...':'Save Marks';
   saveBtn.addEventListener('click',saveMarks); acts.appendChild(saveBtn);
-  if(!hasPending&&!S.saving){const hint=e('span',{style:'font-size:12px;color:var(--muted)'});hint.textContent='Tab / Enter moves between cells';acts.appendChild(hint);}
+  const countEl=e('span',{style:'font-size:12px;color:var(--muted)'});
+  countEl.textContent=nPending>0?`${nPending} unsaved`:'Tab / Enter moves between cells';
+  acts.appendChild(countEl);
   if(S.saveMsg){const msg=e('span',{class:S.saveMsg.startsWith('Error')?'msg-err':'msg-ok'});msg.textContent=S.saveMsg;acts.appendChild(msg);}
   c.appendChild(acts);
   c.appendChild(MarksTable(classId,false,true));
@@ -1107,9 +1230,572 @@ function ViewReports() {
 }
 
 // ══════════════════════════════════════════════════
-//  LOGIN SCREEN
+//  PUPIL MANAGEMENT
 // ══════════════════════════════════════════════════
-function renderLogin(errMsg) {
+async function loadPupilsList() {
+  if (pupilsLoading) return;
+  pupilsLoading = true;
+  const {data, error} = await db.from('pupils').select('id,name,class_id,avatar').order('name');
+  if (!error) S.pupilsList = data || [];
+  else S.pupilsList = [];
+  pupilsLoading = false;
+  render();
+  subscribePupilsRealtime();
+}
+
+let pupilsPolling = null;
+function subscribePupilsRealtime() {
+  subscribePupilsRealtime = () => {};
+  if (pupilsPolling) return;
+  pupilsPolling = setInterval(async () => {
+    const {data} = await db.from('pupils').select('id,name,class_id,avatar').order('name');
+    if (data) {
+      S.pupilsList = data;
+      render();
+    }
+  }, 8000);
+}
+
+function unsubscribePupils() {
+  if (pupilsPolling) { clearInterval(pupilsPolling); pupilsPolling = null; }
+}
+
+async function loadTeachersList() {
+  if (teachersLoading) return;
+  teachersLoading = true;
+  const {data, error} = await db.from('users').select('id,name,email,role,class_id').order('name');
+  if (!error) S.teachersList = (data || []).filter(u => u.role === 'teacher');
+  else S.teachersList = [];
+  teachersLoading = false;
+  render();
+  subscribeTeachersRealtime();
+}
+
+let teachersPolling = null;
+function subscribeTeachersRealtime() {
+  subscribeTeachersRealtime = () => {};
+  if (teachersPolling) return;
+  teachersPolling = setInterval(async () => {
+    const {data} = await db.from('users').select('id,name,email,role,class_id').order('name');
+    if (data) {
+      S.teachersList = data.filter(u => u.role === 'teacher');
+      render();
+    }
+  }, 8000);
+}
+
+function unsubscribeTeachers() {
+  if (teachersPolling) { clearInterval(teachersPolling); teachersPolling = null; }
+}
+
+let pupilsLoading = false, teachersLoading = false;
+
+function unsubscribeAll() {
+  unsubscribePupils();
+  unsubscribeTeachers();
+}
+
+async function uploadAvatar(file, bucket, prefix) {
+  const ext = file.name.split('.').pop();
+  const path = `${prefix}/${Date.now()}.${ext}`;
+  const {error} = await db.storage.from(bucket).upload(path, file, {upsert: true});
+  if (error) return null;
+  const {data} = db.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function initials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function openAvatarLightbox(src, name) {
+  const overlay = d('modal-overlay');
+  overlay.style.cssText = 'background:rgba(0,0,0,.85)';
+  const box = d('', 'text-align:center;max-width:400px;width:90vw');
+  const nameEl = e('div', {style: 'font-size:15px;font-weight:700;color:#fff;margin-bottom:12px'});
+  nameEl.textContent = name || '';
+  const img = e('img', {src, style: 'width:100%;max-width:320px;max-height:320px;border-radius:8px;border:3px solid #fff;object-fit:cover;box-shadow:0 8px 32px rgba(0,0,0,.5)'});
+  const closeBtn = e('button', {style: 'margin-top:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:#fff;padding:8px 24px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600'});
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  box.appendChild(nameEl); box.appendChild(img); box.appendChild(closeBtn); overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+function ViewPupils() {
+  const c = d('content');
+  const h = e('h2', {class: 'page-h'}); h.textContent = 'Pupil Management'; c.appendChild(h);
+
+  if (pupilsLoading) {
+    const ld = d('loader'); ld.innerHTML = '<div class="spin"></div>&ensp;Loading pupils…'; c.appendChild(ld);
+    return c;
+  }
+
+  if (!S.pupilsList.length) {
+    const ld = d('loader'); ld.innerHTML = '<div class="spin"></div>&ensp;Loading pupils…'; c.appendChild(ld);
+    loadPupilsList();
+    return c;
+  }
+
+  const ab = d('action-bar');
+  const addBtn = e('button', {class: 'btn btn-primary'}); addBtn.innerHTML = '+ Add Pupil';
+  addBtn.addEventListener('click', () => openPupilModal(null));
+  ab.appendChild(addBtn);
+
+  const searchIn = e('input', {type: 'text', placeholder: 'Search pupils…', style: 'width:180px'});
+  if (S.pupilSearch) searchIn.value = S.pupilSearch;
+  searchIn.addEventListener('input', () => { S.pupilSearch = searchIn.value.trim(); render(); });
+  ab.appendChild(searchIn);
+
+  const filterSel = e('select', {style: 'width:auto'});
+  const optA = e('option', {value: ''}); optA.textContent = 'All Classes';
+  if (!S.selPupilClass) optA.selected = true;
+  filterSel.appendChild(optA);
+  S.classes.forEach(cl => {
+    const o = e('option', {value: cl.id}); o.textContent = cl.name;
+    if (S.selPupilClass === cl.id) o.selected = true;
+    filterSel.appendChild(o);
+  });
+  filterSel.addEventListener('change', () => {
+    S.selPupilClass = filterSel.value || null;
+    render();
+  });
+  ab.appendChild(filterSel);
+  c.appendChild(ab);
+
+  const wrap = d('tbl-wrap');
+  const tbl = document.createElement('table');
+  const thead = document.createElement('thead'), hr = document.createElement('tr');
+  ['Avatar', 'Name', 'Class', 'Actions'].forEach(txt => {
+    const th = document.createElement('th'); th.textContent = txt; hr.appendChild(th);
+  });
+  thead.appendChild(hr); tbl.appendChild(thead);
+
+  const filtered = S.pupilsList.filter(p => {
+    if (S.selPupilClass && p.class_id !== S.selPupilClass) return false;
+    if (S.pupilSearch) {
+      const q = S.pupilSearch.toLowerCase();
+      if (!p.name.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const tbody = document.createElement('tbody');
+  if (!filtered.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td'); td.colSpan = 4;
+    td.style.cssText = 'padding:24px;text-align:center;color:var(--muted)';
+    td.textContent = S.pupilSearch ? 'No pupils match "' + S.pupilSearch + '"' : 'No pupils found. Click "Add Pupil" to create one.';
+    tr.appendChild(td); tbody.appendChild(tr);
+  } else {
+    filtered.forEach(p => {
+      const tr = document.createElement('tr');
+      const cls = S.classes.find(c => c.id === p.class_id);
+
+      const tdA = document.createElement('td');
+      const avWrap = d('', 'width:42px;height:42px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--g);overflow:hidden;cursor:pointer');
+      avWrap.title = 'Click to enlarge';
+      if (p.avatar) {
+        const avImg = e('img', {src: p.avatar, style: 'width:100%;height:100%;object-fit:cover'});
+        avWrap.addEventListener('click', () => openAvatarLightbox(p.avatar, p.name));
+        avWrap.appendChild(avImg);
+      } else {
+        avWrap.textContent = initials(p.name);
+      }
+      tdA.appendChild(avWrap); tr.appendChild(tdA);
+
+      const tdN = document.createElement('td');
+      const nm = e('span', {style: 'font-weight:500'}); nm.textContent = p.name; tdN.appendChild(nm); tr.appendChild(tdN);
+
+      const tdC = document.createElement('td');
+      const cl = e('span', {class: 'pill'}); cl.textContent = cls?.name || '—'; tdC.appendChild(cl); tr.appendChild(tdC);
+
+      const tdX = document.createElement('td');
+      const edBtn = e('button', {class: 'btn btn-ghost btn-sm'}); edBtn.textContent = 'Edit';
+      edBtn.addEventListener('click', () => openPupilModal(p));
+      const upBtn = e('button', {class: 'btn btn-ghost btn-sm', style: 'margin-left:6px'});
+      upBtn.textContent = '↑ Avatar';
+      upBtn.addEventListener('click', () => triggerAvatarUpload(p.id));
+      const delBtn = e('button', {class: 'btn btn-danger btn-sm', style: 'margin-left:6px'});
+      delBtn.textContent = '✕';
+      delBtn.title = 'Delete pupil';
+      delBtn.addEventListener('click', () => deletePupil(p));
+      tdX.appendChild(edBtn); tdX.appendChild(upBtn); tdX.appendChild(delBtn); tr.appendChild(tdX);
+      tbody.appendChild(tr);
+    });
+  }
+
+  tbl.appendChild(tbody); wrap.appendChild(tbl); c.appendChild(wrap);
+
+  return c;
+}
+
+function triggerAvatarUpload(pupilId) {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.style.display = 'none';
+  fileInput.addEventListener('change', async ev => {
+    if (!ev.target.files[0]) return;
+    const file = ev.target.files[0];
+    processAndUploadAvatar(file, pupilId, 'pupil_avatars', 'pupils');
+  });
+  document.body.appendChild(fileInput);
+  fileInput.click();
+  setTimeout(() => fileInput.remove(), 5000);
+}
+
+function processAndUploadAvatar(file, entityId, bucket, prefix) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = async function() {
+      const SIZE = 300;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      const minDim = Math.min(img.width, img.height);
+      const sx = (img.width - minDim) / 2;
+      const sy = (img.height - minDim) / 2;
+      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
+      canvas.toBlob(async function(blob) {
+        if (!blob) { flashToast('Image processing failed.', 'err'); return; }
+        const croppedFile = new File([blob], file.name, {type: 'image/jpeg'});
+        const url = await uploadAvatar(croppedFile, bucket, prefix);
+        if (url) {
+          if (prefix === 'pupils') {
+            await db.from('pupils').update({avatar: url}).eq('id', entityId);
+            const p = S.pupilsList.find(x => x.id === entityId);
+            if (p) p.avatar = url;
+            await loadPupilsList();
+          } else {
+            await db.from('users').update({avatar: url}).eq('id', entityId);
+            const t = S.teachersList.find(x => x.id === entityId);
+            if (t) t.avatar = url;
+            await loadTeachersList();
+          }
+          flashToast('Avatar uploaded!', 'ok');
+        } else {
+          flashToast('Upload failed. Check bucket permissions.', 'err');
+        }
+      }, 'image/jpeg', 0.85);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function openPupilModal(pupil) {
+  const isNew = !pupil;
+  const overlay = d('modal-overlay');
+  const box = d('modal-box');
+  const title = e('div', {class: 'modal-h'}); title.textContent = isNew ? 'Add New Pupil' : 'Edit Pupil';
+  box.appendChild(title);
+
+  const nameIn = e('input', {type: 'text', placeholder: 'Full name', id: 'pm-name'});
+  if (!isNew) nameIn.value = pupil.name;
+  const nameGroup = d('form-group');
+  const nameLabel = e('label'); nameLabel.textContent = 'Full Name';
+  nameGroup.appendChild(nameLabel); nameGroup.appendChild(nameIn); box.appendChild(nameGroup);
+
+  const clsGroup = d('form-group');
+  const clsLabel = e('label'); clsLabel.textContent = 'Class';
+  const clsSel = e('select', {id: 'pm-class'});
+  S.classes.forEach(cl => {
+    const o = e('option', {value: cl.id}); o.textContent = cl.name;
+    if (!isNew && cl.id === pupil.class_id) o.selected = true;
+    clsSel.appendChild(o);
+  });
+  clsGroup.appendChild(clsLabel); clsGroup.appendChild(clsSel); box.appendChild(clsGroup);
+
+  const foot = d('modal-foot');
+  const cancelBtn = e('button', {class: 'btn btn-ghost'}); cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+  const saveBtn = e('button', {class: 'btn btn-primary'});
+  saveBtn.textContent = isNew ? 'Add Pupil' : 'Save Changes';
+  saveBtn.addEventListener('click', async () => {
+    const name = nameIn.value.trim();
+    const classId = clsSel.value;
+    if (!name) { flashToast('Name is required', 'err'); return; }
+    saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spin"></span>';
+    if (isNew) {
+      const {data, error} = await db.from('pupils').insert({name, class_id: classId}).select('id,name,class_id,avatar').single();
+      if (!error) S.pupilsList.push(data);
+    } else {
+      await db.from('pupils').update({name, class_id: classId}).eq('id', pupil.id);
+      const idx = S.pupilsList.findIndex(x => x.id === pupil.id);
+      if (idx >= 0) S.pupilsList[idx] = {...S.pupilsList[idx], name, class_id: classId};
+    }
+    flashToast(isNew ? 'Pupil added!' : 'Pupil updated!', 'ok');
+    overlay.remove();
+    render();
+  });
+  foot.appendChild(cancelBtn); foot.appendChild(saveBtn); box.appendChild(foot);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  nameIn.focus();
+}
+
+async function deletePupil(pupil) {
+  if (!confirm(`Delete "${pupil.name}"? This cannot be undone.`)) return;
+  await db.from('pupils').delete().eq('id', pupil.id);
+  S.pupilsList = S.pupilsList.filter(x => x.id !== pupil.id);
+  flashToast('Pupil deleted.', 'ok');
+  render();
+}
+
+// ══════════════════════════════════════════════════
+//  TEACHER MANAGEMENT
+// ══════════════════════════════════════════════════
+function ViewTeachers() {
+  const c = d('content');
+  const h = e('h2', {class: 'page-h'}); h.textContent = 'Teacher Management'; c.appendChild(h);
+
+  if (teachersLoading) {
+    const ld = d('loader'); ld.innerHTML = '<div class="spin"></div>&ensp;Loading teachers…'; c.appendChild(ld);
+    return c;
+  }
+
+  if (!S.teachersList.length) {
+    const ld = d('loader'); ld.innerHTML = '<div class="spin"></div>&ensp;Loading teachers…'; c.appendChild(ld);
+    loadTeachersList();
+    return c;
+  }
+
+  const ab = d('action-bar');
+  const addBtn = e('button', {class: 'btn btn-primary'}); addBtn.innerHTML = '+ Add Teacher';
+  addBtn.addEventListener('click', () => openTeacherModal(null));
+  ab.appendChild(addBtn);
+
+  const searchIn = e('input', {type: 'text', placeholder: 'Search teachers…', style: 'width:180px'});
+  if (S.teacherSearch) searchIn.value = S.teacherSearch;
+  searchIn.addEventListener('input', () => { S.teacherSearch = searchIn.value.trim(); render(); });
+  ab.appendChild(searchIn);
+
+  const filtered = S.teachersList.filter(t => {
+    if (S.teacherSearch) {
+      const q = S.teacherSearch.toLowerCase();
+      const cls = S.classes.find(cl => cl.id === t.class_id);
+      const clsName = cls ? cls.name.toLowerCase() : '';
+      if (!t.name.toLowerCase().includes(q) && !t.email.toLowerCase().includes(q) && !clsName.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const statsEl = e('span', {style: 'font-size:12px;color:var(--muted)'});
+  statsEl.textContent = `${filtered.length} of ${S.teachersList.length} teacher${S.teachersList.length !== 1 ? 's' : ''}`;
+  ab.appendChild(statsEl);
+  c.appendChild(ab);
+
+  if (!filtered.length) {
+    const msg = d('empty'); msg.textContent = S.teacherSearch ? `No teachers match "${S.teacherSearch}"` : 'No teachers found. Click "Add Teacher" to create one.';
+    c.appendChild(msg);
+    return c;
+  }
+
+  filtered.forEach(t => {
+    const card = d('teach-card');
+    const av = d('teach-avatar');
+    av.style.cursor = 'pointer';
+    av.title = 'Click to enlarge';
+    if (t.avatar) {
+      const avImg = e('img', {src: t.avatar});
+      av.addEventListener('click', () => openAvatarLightbox(t.avatar, t.name));
+      av.appendChild(avImg);
+    } else {
+      av.textContent = initials(t.name || 'T');
+    }
+    card.appendChild(av);
+
+    const info = d('teach-info');
+    const nm = e('div', {class: 'teach-name'}); nm.textContent = t.name || '—'; info.appendChild(nm);
+    const meta = e('div', {class: 'teach-meta'});
+    meta.innerHTML = `${t.email || ''} <span style="margin-left:8px" class="pill pill-grey">${t.role || 'teacher'}</span>`;
+    info.appendChild(meta);
+    if (t.class_id) {
+      const cls = S.classes.find(cl => cl.id === t.class_id);
+      const clEl = e('div', {class: 'teach-class'}); clEl.textContent = `Class: ${cls?.name || '—'}`; info.appendChild(clEl);
+    }
+    card.appendChild(info);
+
+    const acts = d('teach-actions');
+    const edBtn = e('button', {class: 'btn btn-ghost btn-sm'}); edBtn.textContent = 'Edit';
+    edBtn.addEventListener('click', () => openTeacherModal(t));
+    const avBtn = e('button', {class: 'btn btn-ghost btn-sm'});
+    avBtn.textContent = '↑ Avatar';
+    avBtn.addEventListener('click', () => triggerTeacherAvatarUpload(t.id));
+    const delBtn = e('button', {class: 'btn btn-danger btn-sm'});
+    delBtn.textContent = '✕'; delBtn.title = 'Delete teacher';
+    delBtn.addEventListener('click', () => deleteTeacher(t));
+    acts.appendChild(edBtn); acts.appendChild(avBtn); acts.appendChild(delBtn);
+    card.appendChild(acts);
+    c.appendChild(card);
+  });
+
+  const uploadZone = d('upload-zone', 'margin-top:20px');
+  uploadZone.innerHTML = '<div style="font-size:28px;margin-bottom:8px">📷</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">Upload teacher avatar</div><div class="upload-hint">Click to select image or drag & drop</div>';
+  c.appendChild(uploadZone);
+
+  return c;
+}
+
+function triggerTeacherAvatarUpload(teacherId) {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.style.display = 'none';
+  fileInput.addEventListener('change', ev => {
+    if (!ev.target.files[0]) return;
+    processAndUploadAvatar(ev.target.files[0], teacherId, 'teacher_avatars', 'teachers');
+  });
+  document.body.appendChild(fileInput);
+  fileInput.click();
+  setTimeout(() => fileInput.remove(), 5000);
+}
+
+async function openTeacherModal(teacher) {
+  const isNew = !teacher;
+  const overlay = d('modal-overlay');
+  const box = d('modal-box');
+  const title = e('div', {class: 'modal-h'}); title.textContent = isNew ? 'Create New Teacher' : 'Edit Teacher';
+  box.appendChild(title);
+
+  const nameIn = e('input', {type: 'text', placeholder: 'Full name', id: 'tm-name'});
+  if (!isNew) nameIn.value = teacher.name || '';
+  const nameGroup = d('form-group');
+  const nameLabel = e('label'); nameLabel.textContent = 'Full Name';
+  nameGroup.appendChild(nameLabel); nameGroup.appendChild(nameIn); box.appendChild(nameGroup);
+
+  const emailIn = e('input', {type: 'email', placeholder: 'email@example.com', id: 'tm-email'});
+  if (!isNew) emailIn.value = teacher.email || '';
+  const emailGroup = d('form-group');
+  const emailLabel = e('label'); emailLabel.textContent = 'Email';
+  emailGroup.appendChild(emailLabel); emailGroup.appendChild(emailIn); box.appendChild(emailGroup);
+
+  const roleGroup = d('form-group');
+  const roleLabel = e('label'); roleLabel.textContent = 'Role';
+  const roleSel = e('select', {id: 'tm-role'});
+  ['teacher', 'admin'].forEach(r => {
+    const o = e('option', {value: r}); o.textContent = r.charAt(0).toUpperCase() + r.slice(1);
+    if (!isNew && teacher.role === r) o.selected = true;
+    roleSel.appendChild(o);
+  });
+  roleGroup.appendChild(roleLabel); roleGroup.appendChild(roleSel); box.appendChild(roleGroup);
+
+  const clsGroup = d('form-group');
+  const clsLabel = e('label'); clsLabel.textContent = 'Assigned Class';
+  const clsSel = e('select', {id: 'tm-class'});
+  const noCls = e('option', {value: ''}); noCls.textContent = '— None —';
+  if (!isNew && !teacher.class_id) noCls.selected = true;
+  clsSel.appendChild(noCls);
+  S.classes.forEach(cl => {
+    const o = e('option', {value: cl.id}); o.textContent = cl.name;
+    if (!isNew && cl.id === teacher.class_id) o.selected = true;
+    clsSel.appendChild(o);
+  });
+  clsGroup.appendChild(clsLabel); clsGroup.appendChild(clsSel); box.appendChild(clsGroup);
+
+  const pwGroup = d('form-group');
+  const pwLabel = e('label'); pwLabel.textContent = isNew ? 'Temporary Password' : 'Password (admin only)';
+  const pwIn = e('input', {type: 'password', placeholder: '••••••••', id: 'tm-pw'});
+  if (!isNew) pwIn.disabled = true;
+  pwGroup.appendChild(pwLabel); pwGroup.appendChild(pwIn); box.appendChild(pwGroup);
+
+  const foot = d('modal-foot');
+  const cancelBtn = e('button', {class: 'btn btn-ghost'}); cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+  const saveBtn = e('button', {class: 'btn btn-primary'});
+  saveBtn.textContent = isNew ? 'Create Teacher' : 'Save Changes';
+
+  saveBtn.addEventListener('click', async () => {
+    const name = nameIn.value.trim();
+    const email = emailIn.value.trim();
+    const role = roleSel.value;
+    const classId = clsSel.value || null;
+    const pw = pwIn.value;
+    if (!name) { flashToast('Name is required', 'err'); return; }
+    saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spin"></span>';
+    if (isNew) {
+      if (!email || !pw) { flashToast('Email and password required', 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
+      try {
+        const {data: authUser, error: authErr} = await db.auth.signUp({email, password: pw, options: {data: {name, role, class_id: classId}}});
+        if (authErr) { flashToast('Auth error: ' + authErr.message, 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
+        if (!authUser || !authUser.user) { flashToast('Signup failed. Enable confirmations in Supabase settings.', 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
+        const newUser = authUser.user;
+        await db.from('users').insert({id: newUser.id, name, email, role, class_id: classId});
+        S.teachersList.push({id: newUser.id, name, email, role, class_id: classId});
+        flashToast('Teacher invited! Check email to confirm.', 'ok');
+      } catch (err) {
+        flashToast('Signup unavailable. Create user in Supabase dashboard.', 'err');
+        saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher';
+        return;
+      }
+    } else {
+      const updates = {name, role, class_id: classId};
+      if (email) updates.email = email;
+      await db.from('users').update(updates).eq('id', teacher.id);
+      const idx = S.teachersList.findIndex(x => x.id === teacher.id);
+      if (idx >= 0) S.teachersList[idx] = {...S.teachersList[idx], ...updates};
+    }
+    flashToast(isNew ? 'Teacher created!' : 'Teacher updated!', 'ok');
+    overlay.remove();
+    render();
+  });
+
+  foot.appendChild(cancelBtn); foot.appendChild(saveBtn); box.appendChild(foot);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  nameIn.focus();
+}
+
+async function deleteTeacher(teacher) {
+  if (!confirm(`Remove teacher "${teacher.name}" from the system? (Auth account must be deleted manually in Supabase dashboard)`)) return;
+  await db.from('users').delete().eq('id', teacher.id);
+  S.teachersList = S.teachersList.filter(x => x.id !== teacher.id);
+  flashToast('Teacher removed.', 'ok');
+  render();
+}
+
+// ══════════════════════════════════════════════════
+  //  PASSWORD SET SCREEN (for email confirmation link)
+  // ══════════════════════════════════════════════════
+  function renderPasswordSet() {
+    const root=document.getElementById('app'); root.innerHTML='';
+    const wrap=d('login-wrap');
+    const card=d('login-card');
+
+    const lw=d('login-logo');
+    lw.innerHTML=`<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
+    card.appendChild(lw);
+    const h1=e('h1',{class:'login-h1'}); h1.textContent='Set Your Password'; card.appendChild(h1);
+    const sub=e('p',{class:'login-sub'}); sub.textContent='Create a password to access the system'; card.appendChild(sub);
+
+    const pf=d('field'); const pl=e('label'); pl.textContent='New Password'; pf.appendChild(pl);
+    const pi=e('input',{type:'password',id:'newpw',placeholder:'••••••••',autocomplete:'new-password'}); pf.appendChild(pi); card.appendChild(pf);
+    const pfc=d('field'); const pl2=e('label'); pl2.textContent='Confirm Password'; pfc.appendChild(pl2);
+    const pc=e('input',{type:'password',id:'confirmpw',placeholder:'••••••••',autocomplete:'new-password'}); pfc.appendChild(pc); card.appendChild(pfc);
+
+    const btn=e('button',{class:'btn btn-primary',style:'width:100%;justify-content:center;margin-top:8px'}); btn.textContent='Set Password'; card.appendChild(btn);
+    const doSet=async()=>{
+      btn.disabled=true; btn.innerHTML='<span class="spin"></span>&ensp;Setting…';
+      const pw=pi.value;
+      const cpw=pc.value;
+      if(!pw||pw.length<6){flashToast('Password must be at least 6 characters','err');btn.disabled=false;btn.textContent='Set Password';return;}
+      if(pw!==cpw){flashToast('Passwords do not match','err');btn.disabled=false;btn.textContent='Set Password';return;}
+      const {error}=await db.auth.updateUser({password:pw});
+      if(error){flashToast('Error: '+error.message,'err');btn.disabled=false;btn.textContent='Set Password';return;}
+      flashToast('Password set! Please sign in.','ok');
+      window.location.hash='';
+      render();
+    };
+    btn.addEventListener('click',doSet);
+    const enter=e('p',{style:'text-align:center;margin-top:12px;color:var(--muted)'});
+    enter.innerHTML='<a href="#">Already have an account? Sign in</a>';
+    enter.querySelector('a').addEventListener('click',e=>{e.preventDefault();render();});
+
+    wrap.appendChild(card); wrap.appendChild(enter); root.appendChild(wrap);
+  }
+
+  // ══════════════════════════════════════════════════
+  //  LOGIN SCREEN
+  // ══════════════════════════════════════════════════
+  function renderLogin(errMsg) {
   const root=document.getElementById('app'); root.innerHTML='';
   const wrap=d('login-wrap');
   const card=d('login-card');
@@ -1176,14 +1862,17 @@ function render() {
   let navItems, contentEl;
   if(isAdmin){
     navItems=[
-      {id:'overview',label:'Overview',   icon:'<rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/>'},
-      {id:'marks',   label:'Class Marks',icon:'<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-      {id:'classes', label:'All Classes',icon:'<rect x="1" y="3" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 14v2M11 14v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
-      {id:'reports', label:'Reports',    icon:'<path d="M3 2h10l3 3v13H3V2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'overview', label:'Overview',    icon:'<rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/>'},
+      {id:'marks',    label:'Class Marks', icon:'<path d="M1 4h14M1 8h14M1 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'reports',  label:'Reports',     icon:'<path d="M3 2h10l3 3v13H3V2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
+      {id:'pupils',   label:'Pupil Management', icon:'<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>'},
+      {id:'teachers', label:'Teacher Management', icon:'<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/><path d="M16 6v-2M8 6V4M8 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'},
     ];
     if(S.view==='overview') contentEl=ViewOverview();
     else if(S.view==='marks') contentEl=ViewMarks();
-    else if(S.view==='classes') contentEl=ViewAllClasses();
+    else if(S.view==='reports') contentEl=ViewReports();
+    else if(S.view==='pupils') contentEl=ViewPupils();
+    else if(S.view==='teachers') contentEl=ViewTeachers();
     else contentEl=ViewReports();
   } else {
     navItems=[
@@ -1198,8 +1887,20 @@ function render() {
     const btn=e('button',{class:'nav-item'+(S.view===id?' active':'')});
     btn.innerHTML=`<svg width="15" height="15" viewBox="0 0 16 16" fill="none">${icon}</svg><span>${label}</span>`;
     btn.addEventListener('click',()=>{
-      if(id==='reports'&&!S.reportPupils.length){S.view=id;S.reportSummary=null;render();loadReportPupils();}
-      else{S.view=id;render();}
+      S.view=id;
+      if(id==='pupils'){
+        if(!S.pupilsList.length && !pupilsLoading) loadPupilsList();
+        render();
+      } else if(id==='teachers'){
+        if(!S.teachersList.length && !teachersLoading) loadTeachersList();
+        render();
+      } else if(id==='reports'&&!S.reportPupils.length){
+        S.reportSummary=null;
+        loadReportPupils();
+        render();
+      } else {
+        render();
+      }
     }); sb.appendChild(btn);
   });
 
@@ -1210,15 +1911,25 @@ function render() {
 //  BOOT
 // ══════════════════════════════════════════════════
 (async function boot(){
+  const hash = window.location.hash;
+  if (hash.includes('type=signup') || hash.includes('type=recovery')) {
+    const params = new URLSearchParams(hash.slice(1));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (accessToken && refreshToken) {
+      window.location.hash = '';
+      renderPasswordSet();
+      return;
+    }
+  }
   const {data:{session}}=await db.auth.getSession();
   if(session){
-    // 'users' table — not 'profiles' — matches actual hill-view-ps schema
     const {data:u}=await db.from('users').select('id,name,email,role,class_id').eq('id',session.user.id).single();
     if(u){S.user=u;S.view=u.role==='admin'?'overview':'marks';await loadAll();return;}
   }
   S.loading=false; render();
   db.auth.onAuthStateChange(ev=>{
-    if(ev==='SIGNED_OUT'){Object.assign(S,{user:null,loading:false,classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[]});render();}
+    if(ev==='SIGNED_OUT'){unsubscribeAll();Object.assign(S,{user:null,loading:false,classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,selPupilClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[]});render();}
   });
 })();
 </script>

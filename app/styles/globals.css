@@ -100,6 +100,7 @@ thead .sticky-col{background:var(--bg)}
 .xcel-inp{width:58px;border:none;border-radius:0;padding:5px 4px;text-align:center;font-size:13px;background:transparent;color:var(--text);outline:none;display:block;margin:0 auto}
 .xcel-inp:focus{background:#fffde7;box-shadow:inset 0 0 0 2px var(--warn);border-radius:3px}
 .xcel-inp.changed{background:#fffbf0;color:#7a5300}
+.comment-inp{width:80px;min-width:80px;font-size:11px}
 .excel-tbl tbody td.input-cell{padding:1px;text-align:center}
 .excel-tbl tbody td.input-cell:focus-within{background:#fffde7;outline:2px solid var(--warn);outline-offset:-2px;z-index:2;position:relative}
 .add-pupil-panel{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--gl);border-top:2px dashed #9fbe9f;border-radius:0 0 var(--r) var(--r)}
@@ -109,6 +110,17 @@ thead .sticky-col{background:var(--bg)}
 .gen-progress{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
 @media(max-width:900px){.two-col{grid-template-columns:1fr}.mc-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.sidebar{width:44px}.nav-item span{display:none}.content{padding:14px}}
+@media(max-width:490px){
+  .mc-grid{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .admin-tabs{flex-direction:column}
+  .inline-form{flex-direction:column}
+  .inline-form input,.inline-form select{flex:1;min-width:100%}
+  .excel-wrap{font-size:11px}
+  .excel-tbl thead th{padding:5px 6px;font-size:10px}
+  .xcel-inp{width:40px;padding:3px 2px;font-size:11px}
+  .comment-inp{width:60px;min-width:60px}
+}
 /* ── NURSERY REPORT ── */
 .dot{display:inline-block;width:18px;height:18px;border-radius:50%;border:2px solid #1a6b3c;box-sizing:border-box}
 .dot-filled{background:#1a6b3c}
@@ -116,6 +128,13 @@ thead .sticky-col{background:var(--bg)}
 .nursery-scale{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;background:#f0f8f4;border-radius:8px;margin-bottom:20px;font-size:12px;color:#555}
 .nursery-scale .k-item{display:flex;align-items:center;gap:6px}
 .nursery-scale strong{color:#1a6b3c;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
+.color-settings{background:#f0f8f4;border-radius:var(--r);padding:16px;margin-bottom:16px}
+.color-settings h4{font-size:13px;font-weight:600;color:var(--g);margin-bottom:12px}
+.color-grid{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.color-item{display:flex;align-items:center;gap:8px}
+.color-item label{font-size:12px;font-weight:500}
+.color-item input[type=color]{width:36px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px}
+.color-preview{display:flex;gap:8px;align-items:center;padding-top:12px;border-top:1px solid var(--border)}
 .nursery-table{width:100%;border-collapse:collapse;font-size:13px}
 .nursery-table th{background:#1a6b3c;color:#fff;padding:9px 12px;text-align:left;font-weight:500}
 .nursery-table td{padding:9px 12px;border-bottom:1px solid #eee}

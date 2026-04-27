@@ -19,6 +19,7 @@ type Mark = {
   pupil_id: string;
   subject_id: string;
   score: number;
+  teacher_comment?: string | null;
 };
 
 type DashboardPayload = {

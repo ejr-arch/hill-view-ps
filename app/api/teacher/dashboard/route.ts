@@ -68,9 +68,9 @@ export async function GET() {
   const { data: marks } = pupilIds.length
     ? await supabase
         .from("marks")
-        .select("id, pupil_id, subject_id, score")
+        .select("id, pupil_id, subject_id, score, teacher_comment")
         .in("pupil_id", pupilIds)
-    : { data: [] as Array<{ id: string; pupil_id: string; subject_id: string; score: number }> };
+    : { data: [] as Array<{ id: string; pupil_id: string; subject_id: string; score: number; teacher_comment?: string | null }> };
 
   const { data: performance } = await supabase
     .from("class_performance")

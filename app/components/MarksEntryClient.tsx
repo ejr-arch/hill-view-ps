@@ -18,6 +18,7 @@ type Mark = {
   pupil_id: string;
   subject_id: string;
   score: number;
+  teacher_comment?: string | null;
 };
 
 type Props = {
@@ -41,22 +42,20 @@ const dotLabel = (filled: number) => {
   return labels[Math.min(filled, 4)] || "Beginning";
 };
 
-const renderDots = (filled: number) => {
+const renderDots = (filled: number, colors: Record<number, string>) => {
   let dots = [];
   for (let i = 0; i < 5; i++) {
+    const color = colors[i + 1] || "#1a6b3c";
     dots.push(
-      <span
-        key={i}
-        style={{
-          display: "inline-block",
-          width: "16px",
-          height: "16px",
-          borderRadius: "50%",
-          border: "2px solid #1a6b3c",
-          background: i < filled ? "#1a6b3c" : "transparent",
-          boxSizing: "border-box",
-        }}
-      />
+      <span key={i} style={{
+        display: "inline-block",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        border: `2px solid ${color}`,
+        background: i < filled ? color : "transparent",
+        boxSizing: "border-box" as const,
+      }} />
     );
   }
   return dots;
@@ -110,12 +109,21 @@ export default function MarksEntryClient({
 }: Props) {
   const keySeparator = "::";
   const [pending, setPending] = useState<Record<string, number>>({});
+  const [pendingComments, setPendingComments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pupilList, setPupilList] = useState<Pupil[]>(pupils);
   const [newPupilName, setNewPupilName] = useState("");
   const [markMap, setMarkMap] = useState<Map<string, number>>(new Map());
   const [showToast, setShowToast] = useState(false);
+  const [showColorSettings, setShowColorSettings] = useState(false);
+  const [levelColors, setLevelColors] = useState<Record<number, string>>({
+    1: "#1a6b3c",
+    2: "#1a6b3c",
+    3: "#1a6b3c",
+    4: "#1a6b3c",
+    5: "#1a6b3c",
+  });
 
   useEffect(() => {
     setPupilList(pupils);
@@ -178,13 +186,21 @@ export default function MarksEntryClient({
     setPending((prev) => ({ ...prev, [key]: score }));
   };
 
+  const handleCommentChange = (key: string, value: string) => {
+    setPendingComments((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const getComment = (key: string) => {
+    return pendingComments[key] ?? "";
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
 
     const updates = Object.entries(pending).map(([key, score]) => {
       const [pupil_id, subject_id] = key.split(keySeparator);
-      return { pupil_id, subject_id, score };
+      return { pupil_id, subject_id, score, teacher_comment: pendingComments[key] || null };
     });
 
     if (updates.length === 0) {
@@ -221,6 +237,7 @@ export default function MarksEntryClient({
     });
     setMessage("Marks saved successfully.");
     setPending({});
+    setPendingComments({});
     setSaving(false);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2200);
@@ -336,12 +353,37 @@ export default function MarksEntryClient({
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
           {saving ? <span className="spin"></span> : "Save Marks"}
         </button>
+        {isNursery && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowColorSettings(!showColorSettings)}>
+            {showColorSettings ? "Hide Colors" : "Level Colors"}
+          </button>
+        )}
         {message && !showToast && (
           <span className={message.includes("success") ? "msg-ok" : "msg-err"}>
             {message}
           </span>
         )}
       </div>
+      {showColorSettings && isNursery && (
+        <div className="color-settings">
+          <h4>Nursery Level Colors</h4>
+          <div className="color-grid">
+            {([1, 2, 3, 4, 5] as const).map((level) => (
+              <div key={level} className="color-item">
+                <label>Level {level}:</label>
+                <input
+                  type="color"
+                  value={levelColors[level]}
+                  onChange={(e) => setLevelColors((prev) => ({ ...prev, [level]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="color-preview">
+            {renderDots(3, levelColors)}
+          </div>
+        </div>
+      )}
       {pupilList.length === 0 || subjects.length === 0 ? (
         <div className="empty">
           No pupils or subjects found for this class.
@@ -355,6 +397,11 @@ export default function MarksEntryClient({
               {subjects.map((subject) => (
                 <th key={subject.id} style={{ textAlign: "center" }}>
                   {subject.name.length > 13 ? subject.name.slice(0, 11) + "…" : subject.name}
+                </th>
+              ))}
+              {subjects.map((subject) => (
+                <th key={`cmt-${subject.id}`} style={{ textAlign: "center", minWidth: "100px" }}>
+                  Cmt
                 </th>
               ))}
               <th style={{ background: "#d8ead8" }}>Total</th>
@@ -381,8 +428,9 @@ export default function MarksEntryClient({
                     const key = `${pupil.id}${keySeparator}${subject.id}`;
                     const value = pending[key] ?? markMap.get(key) ?? 0;
                     const isPending = pending[key] !== undefined;
+                    const comment = getComment(key);
                     return (
-                      <td key={subject.id} className="input-cell">
+                      <td key={`score-${subject.id}`} className="input-cell">
                         <input
                           type="number"
                           min={0}
@@ -392,6 +440,22 @@ export default function MarksEntryClient({
                           onChange={(event) => handleChange(key, event.target.value)}
                           className={`xcel-inp ${isPending ? "changed" : ""}`}
                           title={`${pupil.name} — ${subject.name}`}
+                        />
+                      </td>
+                    );
+                  })}
+                  {subjects.map((subject) => {
+                    const key = `${pupil.id}${keySeparator}${subject.id}`;
+                    const comment = getComment(key);
+                    return (
+                      <td key={`cmt-${subject.id}`} className="input-cell">
+                        <input
+                          type="text"
+                          placeholder="Cmt"
+                          value={comment}
+                          onChange={(event) => handleCommentChange(key, event.target.value)}
+                          className="xcel-inp comment-inp"
+                          title={`Comment for ${subject.name}`}
                         />
                       </td>
                     );
@@ -423,7 +487,7 @@ export default function MarksEntryClient({
               );
             })}
             <tr>
-              <td colSpan={subjects.length + 5} className="add-pupil-panel">
+              <td colSpan={subjects.length * 2 + 5} className="add-pupil-panel">
                 <span style={{ fontSize: "18px", flexShrink: 0 }}>＋</span>
                 <input
                   type="text"
