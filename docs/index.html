@@ -181,6 +181,11 @@ thead .sticky-col{background:var(--bg)}
 // ══════════════════════════════════════════════════
 const SUPA_URL = 'https://gtguutliwmhntuigcqta.supabase.co';
 const SUPA_KEY = 'sb_publishable_32CnYot-3Kn2ysRljL9-zQ_G5r_QqLI';
+const CLOUDINARY = {
+  cloudName: 'dkh8e8upn',
+  apiKey: '666746752822281',
+  apiSecret: 'Qg5lWT8QKPmlmHXJ-i4cYwUcvBY'
+};
 const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ══════════════════════════════════════════════════
@@ -208,6 +213,7 @@ const S = {
   classPerf: [], submissions: [],
   // teacher
   selClass: null,      // admin class selector
+  teacherClassIds: [], // teacher's assigned classes
   pending: {},         // `${pupil_id}::${subject_id}` → score (unsaved)
   saving: false,
   saveMsg: null,
@@ -287,11 +293,29 @@ async function loadAll() {
   const [clsR,subR,pupR] = await Promise.all([
     db.from('classes').select('id,name').order('name'),
     db.from('subjects').select('id,name,level').order('name'),
-    db.from('pupils').select('id,name,class_id').order('name'),  // RLS filters teachers
+    db.from('pupils').select('id,name,class_id').order('name'),
   ]);
   S.classes  = clsR.data  || [];
   S.subjects = subR.data  || [];
-  S.pupils   = pupR.data  || [];
+  
+  // Load teacher classes FIRST (for filtering pupils)
+  S.teacherClassIds = [];
+  if (S.user.role === 'teacher') {
+    const {data: tcData, error: tcErr} = await db.from('teacher_classes').select('class_id').eq('teacher_id', S.user.id);
+    if (tcErr) console.warn('Load teacher_classes error:', tcErr);
+    S.teacherClassIds = (tcData || []).map(tc => tc.class_id);
+    if (S.teacherClassIds.length === 0 && S.user.class_id) {
+      S.teacherClassIds = [S.user.class_id];
+    }
+    console.log('Teacher class IDs loaded:', S.teacherClassIds);
+  }
+  
+  // Filter pupils based on teacher classes
+  if (S.user.role === 'teacher' && S.teacherClassIds.length > 0) {
+    S.pupils = (pupR.data || []).filter(p => S.teacherClassIds.includes(p.class_id));
+  } else {
+    S.pupils = pupR.data || [];
+  }
 
   // Marks
   S.marksMap = {};
@@ -363,6 +387,9 @@ async function saveMarks() {
       updates.forEach(u=>{ S.marksMap[markKey(u.pupil_id,u.subject_id)]=u.score; });
       S.pending={}; S.saveMsg=`Successfully saved ${updates.length} mark(s)!`;
       flashToast(`Successfully saved ${updates.length} mark(s)!`, 'ok');
+      
+      // Auto-generate teacher comments based on average
+      await autoGenerateTeacherComments(updates);
     }
   } catch(e) {
     S.saving=false;
@@ -371,6 +398,43 @@ async function saveMarks() {
     alert('Save failed: ' + e.message);
   }
   render();
+}
+
+async function autoGenerateTeacherComments(savedUpdates) {
+  const classId = S.selClass || S.classes[0]?.id;
+  if (!classId) return;
+  
+  const classPupils = S.pupils.filter(p => p.class_id === classId);
+  const classSubjects = S.subjects.filter(s => {
+    const lvl = resolveLevel(classId).toLowerCase();
+    return s.level?.toLowerCase() === lvl;
+  });
+  
+  for (const pupil of classPupils) {
+    let total = 0, count = 0;
+    for (const subj of classSubjects) {
+      const score = S.marksMap[markKey(pupil.id, subj.id)];
+      if (score !== undefined) {
+        total += score;
+        count++;
+      }
+    }
+    if (count === 0) continue;
+    
+    const avg = Math.round(total / count);
+    let comment = '';
+    if (avg >= 90) comment = 'Excellent performance! Keep it up.';
+    else if (avg >= 80) comment = 'Very good work. Continue striving for excellence.';
+    else if (avg >= 70) comment = 'Good effort. Aim higher next term.';
+    else if (avg >= 60) comment = 'Fair performance. More effort needed.';
+    else if (avg >= 50) comment = 'Pass. Work harder to improve.';
+    else comment = 'Needs improvement. Attend extra lessons.';
+    
+    // Update comment in database for all subjects of this pupil
+    for (const subj of classSubjects) {
+      await db.from('marks').update({teacher_comment: comment}).eq('pupil_id', pupil.id).eq('subject_id', subj.id);
+    }
+  }
 }
 
 async function addPupil(name, classId) {
@@ -432,7 +496,7 @@ async function signIn(email,pw) {
     return 'Auth error: '+error.message;
   }
   // Read from 'users' table — matches hill-view-ps schema (NOT 'profiles')
-  const {data:u,error:ue} = await db.from('users').select('id,name,email,role,class_id').eq('id',data.user.id).single();
+  const {data:u,error:ue} = await db.from('users').select('id,name,email,role,class_id,avatar').eq('id',data.user.id).single();
   if(ue) return `Auth OK but users table error: "${ue.message}". Check that mock_data.sql was run with the correct auth user IDs.`;
   if(!u) return 'Auth OK but no row in users table for this account. Run mock_data.sql and replace UUID placeholders with real auth user IDs.';
   S.user=u; S.view=u.role==='admin'?'overview':'marks';
@@ -442,7 +506,7 @@ async function signIn(email,pw) {
 async function signOut() {
   await db.auth.signOut();
   unsubscribeAll();
-  Object.assign(S,{user:null,view:'overview',classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[],loading:false,chartInst:null});
+  Object.assign(S,{user:null,view:'overview',classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,teacherClassIds:[],pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[],loading:false,chartInst:null});
   render();
 }
 
@@ -514,12 +578,19 @@ const REPORT_DOC_CSS = `
   .toolbar strong{flex:1;font-size:13px}
   .toolbar button{border:none;background:rgba(255,255,255,.18);color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
   .sheet{width:210mm;min-height:297mm;margin:14px auto;background:#fff;padding:12mm 10mm 10mm;border:1px solid #cfd6cf}
-  .head{text-align:center}
-  .head h1{margin:0;font-size:18px;font-weight:800}
-  .motto{font-size:11px;font-style:italic;margin-top:2px}
-  .tel{font-size:11px;margin-top:3px}
-  .bar{margin:12px 0 10px;background:#1f4275;color:#fff;text-align:center;padding:5px 8px;font-size:13px;font-weight:700;text-transform:uppercase}
-  .lines3,.lines4{display:grid;gap:10px 12px;margin-bottom:8px;font-size:12px}
+  .school-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .school-center{flex:1;text-align:center}
+  .school-name{color:#cc1010;font-weight:900;font-size:21px;letter-spacing:.02em;text-transform:uppercase;line-height:1.1}
+  .school-sub{font-size:10px;font-weight:700;color:#111;margin-top:3px;line-height:1.7}
+  .report-title{font-weight:900;font-size:13px;letter-spacing:.1em;text-decoration:underline;text-underline-offset:3px;margin-top:4px}
+  .photo-box{width:76px;height:92px;border:1.5px solid #777;background:#e8e8e8;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .info-row{display:flex;flex-wrap:wrap;gap:0 20px;font-size:11.5px;font-weight:700;border-top:2px solid #000;border-bottom:2px solid #000;padding:5px 0;margin:7px 0 5px}
+  .info-item{display:flex;align-items:center;gap:4px}
+  .info-line{display:inline-block;width:90px;border-bottom:1px solid #555;height:14px;vertical-align:bottom}
+.info-line-sm{width:50px}
+.info-line-lg{width:120px}
+.section-title{text-align:center;font-weight:900;font-size:12px;text-decoration:underline;margin:7px 0 4px;text-transform:uppercase;letter-spacing:.07em}
+.lines3,.lines4{display:grid;gap:10px 12px;margin-bottom:8px;font-size:12px}
   .lines3{grid-template-columns:1fr 1fr 1fr}
   .lines4{grid-template-columns:1fr 1fr 1fr 1fr}
   .line-field{white-space:nowrap}
@@ -527,29 +598,51 @@ const REPORT_DOC_CSS = `
   .key-title{font-size:12px;font-weight:700;margin:8px 0 4px}
   .key-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:8px;font-size:11px}
   .key-item{display:flex;align-items:center;gap:7px}
-  .key-dot{width:10px;height:10px;border-radius:50%}
-  .tbl{width:100%;border-collapse:collapse}
-  .tbl th,.tbl td{border:1px solid #727887;padding:5px 6px;font-size:11px;vertical-align:middle}
-  .tbl th{background:#1f4275;color:#fff;font-weight:700}
-  .tbl tbody tr:nth-child(odd) td{background:#d9dfec}
-  .tbl tbody tr:nth-child(even) td{background:#eef1f7}
-  .center{text-align:center}
-  .right{text-align:right}
-  .mark-dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #444}
+  .key-dot{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.15)}
   .excellent{background:#f2c500}
   .verygood{background:#d53636}
   .good{background:#2e63d1}
   .poor{background:#18962f}
   .empty-dot{background:transparent}
-  .grade-box{background:#d9dfec;border:1px solid #8b96b1;padding:6px 8px;margin-bottom:12px}
+  .tbl{width:100%;border-collapse:collapse}
+  .tbl th,.tbl td{border:1.5px solid #444;padding:3px 6px;font-size:11.5px;vertical-align:middle;text-align:center}
+  .tbl th{font-weight:900;font-size:10.5px;text-transform:uppercase;background:#fff}
+  .tbl td:first-child{text-align:left;font-weight:700;padding-left:8px}
+  .tbl tbody tr:nth-child(odd) td{background:#f0f0f0}
+  .grade-box{background:#f0f0f0;border:1px solid #444;padding:6px 8px;margin-bottom:12px}
   .grade-box .cap{font-size:11px;font-weight:700;margin-bottom:3px}
   .grade-box table{width:100%;border-collapse:collapse}
   .grade-box td,.grade-box th{border:none;padding:2px 4px;font-size:10px;text-align:center}
+  .g-row{display:grid;grid-template-columns:80px repeat(8,1fr);gap:0;background:#fff;border:1px solid #444}
+  .g-cell{text-align:center;padding:1px 2px;border-right:1px solid #aaa;font-size:10px}
+  .g-cell:last-child{border-right:none}
+  .g-head{font-weight:900;text-align:right;padding-right:6px}
   .comment{margin-top:10px;font-size:11px}
   .comment .label{font-weight:700;margin-bottom:2px}
   .comment .lineblock{border-bottom:1px solid #555;height:18px}
-  .comment .meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
-  .footer-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-top:14px;font-size:11px}
+  .cmt-line{border-bottom:1px solid #666;margin:3px 0;min-height:15px}
+  .cmt-dotted{border-bottom:1px dotted #888}
+  .sig-row{display:flex;justify-content:flex-end;font-size:10px;color:#444;margin-top:1px}
+  .agg-row{display:flex;justify-content:center;gap:40px;font-weight:900;font-size:13px;margin:6px 0;align-items:center}
+  .agg-item{display:flex;align-items:center;gap:6px}
+  .agg-line{display:inline-block;width:48px;border-bottom:1px solid #555;height:14px}
+  .fees-row{display:flex;flex-wrap:wrap;gap:3px 24px;font-size:11px;font-weight:700;margin:5px 0}
+  .fees-line{display:inline-block;width:80px;border-bottom:1px solid #555;height:13px;vertical-align:bottom}
+  .dates-row{display:flex;justify-content:space-between;font-size:11px;font-weight:900;margin:6px 0}
+  .date-line{display:inline-block;width:80px;border-bottom:1px solid #555;height:13px;vertical-align:bottom}
+  .note-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px}
+  .note-box{font-size:10px;font-weight:700}
+  .stamp{width:64px;height:64px;border:2px dashed #aaa;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8.5px;color:#aaa;font-weight:700;text-align:center}
+  .motto{text-align:center;font-weight:900;font-size:13px;letter-spacing:.08em;margin-top:7px;border-top:2.5px solid #000;padding-top:6px}
+  .key-row{display:flex;gap:18px;font-size:11.5px;font-weight:700;align-items:center;flex-wrap:wrap;margin:6px 0 10px}
+  .dot{width:16px;height:16px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle;border:1px solid rgba(0,0,0,.15)}
+  .dot-y{background:#f5c518}.dot-r{background:#dc3545}.dot-g{background:#198754}.dot-b{background:#0d6efd}
+  .skills-grid{display:grid;grid-template-columns:repeat(5,1fr);border-top:1.5px solid #444;border-left:1.5px solid #444}
+  .skill-cell{border-right:1.5px solid #444;border-bottom:1.5px solid #444}
+  .skill-label{font-weight:900;font-size:9px;text-align:center;padding:3px 2px;border-bottom:1px solid #ccc;text-transform:capitalize;line-height:1.2;background:#f7f7f7;letter-spacing:.02em}
+  .skill-body{position:relative;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0}
+  .center{text-align:center}
+  .right{text-align:right}
   @media print{body{background:#fff}.toolbar{display:none}.sheet{margin:0;border:none}}
 `;
 
@@ -643,41 +736,53 @@ function buildNurseryPdfCard(summary, subjects) {
     <td class="center"><span class="mark-dot ${scoreBand(nurseryCellScore(subjectMap,c))}"></span></td>
   </tr>`).join('');
   return `<section class="sheet">
-    <div class="head"><h1>HILL VIEW PRIMARY SCHOOL - NKOOWE</h1><div class="motto">"Strive for the best"</div><div class="tel">Tel: ___________________</div></div>
+    <div class="head"><h1>HILL VIEW NURSERY SCHOOL - NKOOWE</h1><div class="motto">"Plan For Tomorrow"</div><div class="tel">Tel: ___________________</div></div>
     <div class="bar">END OF TERM INDIVIDUAL ASSESSMENT REPORT</div>
     <div class="lines3">
       <div class="line-field"><b>Name:</b> <span class="line">${escapeHtml(summary.pupil_name)}</span></div>
+      <div class="line-field"><b>Term:</b> <span class="line">${REPORT_TERM}</span></div>
+      <div class="line-field"><b>Year:</b> <span class="line">${REPORT_YEAR}</span></div>
+    </div>
+    <div class="lines4">
       <div class="line-field"><b>Class:</b> <span class="line">${escapeHtml(summary.class_name)}</span></div>
-      <div class="line-field"><b>Date:</b> <span class="line">${new Date().toLocaleDateString()}</span></div>
-    </div>
-    <div class="key-title">KEY:</div>
-    <div class="key-grid">
-      <div class="key-item"><span class="key-dot excellent"></span>Excellent (85% - 100%)</div>
-      <div class="key-item"><span class="key-dot good"></span>Good (50% - 69%)</div>
-      <div class="key-item"><span class="key-dot verygood"></span>Very Good (70% - 84%)</div>
-      <div class="key-item"><span class="key-dot poor"></span>Needs Improvement (0%-49%)</div>
-    </div>
-    <div class="lines3" style="margin-bottom:10px">
+      <div class="line-field"><b>House:</b> <span class="line">${summary.house || ''}</span></div>
+      <div class="line-field"><b>Pay Code:</b> <span class="line">${summary.pay_code || ''}</span></div>
       <div class="line-field"><b>POSITION:</b> <span class="line">${escapeHtml(summary.position ?? '')}</span></div>
-      <div class="line-field"><b>OUT OF:</b> <span class="line">${escapeHtml(reportOutOf(summary.class_name))}</span></div>
-      <div class="line-field"><b>TERM:</b> <span class="line">${REPORT_TERM}</span></div>
+    </div>
+    <div class="key-row">
+      <b style="font-size:12px">KEY:</b>
+      <span><span class="dot dot-y"></span><b>Very Good</b></span>
+      <span><span class="dot dot-r"></span><b>Good</b></span>
+      <span><span class="dot dot-g"></span><b>Needs Improvement</b></span>
+      <span><span class="dot dot-b"></span><b>Tries</b></span>
     </div>
     <table class="tbl">
       <thead><tr><th>LEARNING AREA</th><th style="width:36px"></th><th>SKILLS</th><th style="width:36px"></th><th>HABITS</th><th style="width:36px"></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="comment"><div class="label">Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div></div><div>Signature: ___________________</div></div></div>
-    <div class="comment"><div class="label">Head Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div></div><div>Signature: ___________________</div></div></div>
-    <div class="footer-grid">
-      <div><b>This term's balance:</b> ___________________</div>
-      <div><b>Next term's fees:</b> ___________________</div>
-      <div><b>This term ended on:</b> ___________________</div>
-      <div><b>Next term begins:</b> ___________________</div>
+    <div class="comment"><div class="label">Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+    <div class="comment"><div class="label">Head Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+    <div class="fees-row">
+      <span><b>Requirement Fee:</b> <span class="fees-line">${summary.req_fee || ''}</span></span>
+      <span><b>Next Term's Fees:</b> <span class="fees-line">${summary.next_fee || ''}</span></span>
     </div>
+    <div class="fees-row">
+      <span><b>School Fees Balance:</b> <span class="fees-line" style="width:120px">${summary.balance || ''}</span></span>
+      <span><b>Development:</b> <span class="fees-line" style="width:120px">${summary.development || ''}</span></span>
+    </div>
+    <div class="dates-row">
+      <span>This Term Ended On: <span class="date-line">${summary.term_ended || ''}</span></span>
+      <span>Next Term Starts On: <span class="date-line">${summary.next_term || ''}</span></span>
+    </div>
+    <div class="note-row">
+      <div class="note-box"><b>Note:</b> This report is valid only when it bears school stamp</div>
+      <div class="stamp">School<br>Stamp</div>
+    </div>
+    <div class="motto">Motto: 'Plan For Tomorrow'</div>
   </section>`;
 }
 
-function buildPrimaryPdfCard(summary, subjects) {
+function buildPrimaryPdfCard(summary, subjects, progressiveScores) {
   const subjectMap = mapSubjectScores(subjects);
   const commentMap = {};
   (subjects || []).forEach(s => { if (s.teacher_comment) commentMap[normalizeLabel(s.subject_name)] = s.teacher_comment; });
@@ -702,17 +807,35 @@ function buildPrimaryPdfCard(summary, subjects) {
     const score = pickScore(subjectMap, [subject]);
     return score == null || Number.isNaN(score) ? sum : sum + toAgg(score);
   }, 0);
+
+  // Progressive Assessment Records
+  const progRows = PRIMARY_REPORT_SUBJECTS.map(subject => {
+    const bot = progressiveScores ? pickScore(progressiveScores.bot, [subject]) : null;
+    const mid = progressiveScores ? pickScore(progressiveScores.mid, [subject]) : null;
+    return `<tr>
+      <td style="text-align:left;font-weight:700;padding-left:8px">${escapeHtml(subject)}</td>
+      <td>${bot != null && !Number.isNaN(bot) ? bot : ''}</td>
+      <td>${mid != null && !Number.isNaN(mid) ? mid : ''}</td>
+      <td></td>
+      <td></td>
+    </tr>`;
+  }).join('');
+
   return `<section class="sheet">
-    <div class="head"><h1>HILL VIEW PRIMARY SCHOOL - NKOOWE</h1><div class="motto">"Strive for the best"</div><div class="tel">Tel: ___________________</div></div>
+    <div class="head"><h1>HILL VIEW PRIMARY SCHOOL - NKOOWE</h1><div class="motto">"Plan For Tomorrow"</div><div class="tel">Tel: ___________________</div></div>
     <div class="bar">END OF TERM ACADEMIC REPORT CARD - PRIMARY SECTION</div>
     <div class="lines3">
       <div class="line-field"><b>Name:</b> <span class="line">${escapeHtml(summary.pupil_name)}</span></div>
-      <div class="line-field"><b>Class:</b> <span class="line">${escapeHtml(summary.class_name)}</span></div>
-      <div class="line-field"><b>Stream:</b> <span class="line">${REPORT_STREAM}</span></div>
-    </div>
-    <div class="lines4">
       <div class="line-field"><b>Term:</b> <span class="line">${REPORT_TERM}</span></div>
       <div class="line-field"><b>Year:</b> <span class="line">${REPORT_YEAR}</span></div>
+    </div>
+    <div class="lines4">
+      <div class="line-field"><b>Class:</b> <span class="line">${escapeHtml(summary.class_name)}</span></div>
+      <div class="line-field"><b>House:</b> <span class="line">${summary.house || ''}</span></div>
+      <div class="line-field"><b>Pay Code:</b> <span class="line">${summary.pay_code || ''}</span></div>
+      <div class="line-field"><b>Stream:</b> <span class="line">${REPORT_STREAM}</span></div>
+    </div>
+    <div class="lines3">
       <div class="line-field"><b>Position:</b> <span class="line">${escapeHtml(summary.position ?? '')}</span></div>
       <div class="line-field"><b>Out of:</b> <span class="line">${escapeHtml(reportOutOf(summary.class_name))}</span></div>
     </div>
@@ -720,7 +843,7 @@ function buildPrimaryPdfCard(summary, subjects) {
       <div class="cap">GRADING SCALE:</div>
       <table><tbody>
         <tr><th>D1</th><th>D2</th><th>C3</th><th>C4</th><th>C5</th><th>C6</th><th>P7</th><th>P8</th><th>F9</th></tr>
-        <tr><td>90-100</td><td>80-89</td><td>70-79</td><td>65-69</td><td>60-64</td><td>55-59</td><td>45-54</td><td>40-44</td><td>0-39</td></tr>
+        <tr><td>95-100</td><td>80-94</td><td>70-79</td><td>65-69</td><td>60-64</td><td>50-59</td><td>45-49</td><td>35-44</td><td>00-34</td></tr>
         <tr><td>Distinction</td><td>Distinction</td><td>Credit</td><td>Credit</td><td>Credit</td><td>Credit</td><td>Pass</td><td>Pass</td><td>Fail</td></tr>
       </tbody></table>
     </div>
@@ -738,15 +861,36 @@ function buildPrimaryPdfCard(summary, subjects) {
         </tr>
       </tbody>
     </table>
+    <div class="section-title">PROGRESSIVE ASSESSMENT RECORDS</div>
+    <table class="tbl" style="margin-bottom:12px">
+      <thead><tr><th style="text-align:left;padding-left:8px;width:30%">Subject</th><th>B.O.T</th><th>Mid Term</th><th>AGG</th><th>Division</th></tr></thead>
+      <tbody>${progRows}</tbody>
+    </table>
     <div class="comment"><div class="label">Class Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
     <div class="comment"><div class="label">Head Teacher's Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
-    <div class="comment"><div class="label">Parent / Guardian Comment:</div><div class="lineblock"></div><div class="meta"><div>Name: _____________________________</div><div>Signature: ___________________</div></div></div>
+    <div class="fees-row">
+      <span><b>Requirement Fee:</b> <span class="fees-line">${summary.req_fee || ''}</span></span>
+      <span><b>Next Term's Fees:</b> <span class="fees-line">${summary.next_fee || ''}</span></span>
+    </div>
+    <div class="fees-row">
+      <span><b>School Fees Balance:</b> <span class="fees-line" style="width:120px">${summary.balance || ''}</span></span>
+      <span><b>Development:</b> <span class="fees-line" style="width:120px">${summary.development || ''}</span></span>
+    </div>
+    <div class="dates-row">
+      <span>This Term Ended On: <span class="date-line">${summary.term_ended || ''}</span></span>
+      <span>Next Term Starts On: <span class="date-line">${summary.next_term || ''}</span></span>
+    </div>
+    <div class="note-row">
+      <div class="note-box"><b>Note:</b> This report is valid only when it bears school stamp</div>
+      <div class="stamp">School<br>Stamp</div>
+    </div>
+    <div class="motto">Motto: 'Plan For Tomorrow'</div>
   </section>`;
 }
 
-function buildReportCardHtml(summary, subjects) {
+function buildReportCardHtml(summary, subjects, progressiveScores) {
   const isNursery = summary.class_name && summary.class_name.startsWith('KG');
-  return isNursery ? buildNurseryPdfCard(summary, subjects) : buildPrimaryPdfCard(summary, subjects);
+  return isNursery ? buildNurseryPdfCard(summary, subjects) : buildPrimaryPdfCard(summary, subjects, progressiveScores);
 }
 
 function openReportWindow(title, label, bodyHtml) {
@@ -755,8 +899,8 @@ function openReportWindow(title, label, bodyHtml) {
   w.document.close();
 }
 
-function printReport(summary, subjects) {
-  openReportWindow(`Report - ${summary.pupil_name}`, `Hill View Report Card - ${summary.pupil_name}`, buildReportCardHtml(summary, subjects));
+function printReport(summary, subjects, progressiveScores) {
+  openReportWindow(`Report - ${summary.pupil_name}`, `Hill View Report Card - ${summary.pupil_name}`, buildReportCardHtml(summary, subjects, progressiveScores));
 }
 
 async function generateAllReports(filterClass) {
@@ -1056,7 +1200,9 @@ function ViewOverview() {
 // ══════════════════════════════════════════════════
 function ViewMarks() {
   const isAdmin=S.user.role==='admin';
-  const classId=isAdmin?(S.selClass||S.classes[0]?.id):S.user.class_id;
+  // Teachers can have multiple classes - get first assigned class or fall back to class_id
+  const teacherClassIds = S.teacherClassIds || [];
+  const classId = isAdmin ? (S.selClass || S.classes[0]?.id) : (teacherClassIds[0] || S.user.class_id);
   const cls=S.classes.find(c=>c.id===classId);
   const nPending=Object.keys(S.pending).length;
   const hasPending=nPending>0;
@@ -1068,6 +1214,12 @@ function ViewMarks() {
   if(isAdmin){
     const sel=e('select',{style:'width:auto'});
     S.classes.forEach(cl=>{const o=e('option',{value:cl.id});o.textContent=cl.name;if(cl.id===classId)o.selected=true;sel.appendChild(o);});
+    sel.addEventListener('change',ev=>{S.selClass=ev.target.value;S.pending={};S.saveMsg=null;render();});
+    hdr.appendChild(sel);
+  } else if (teacherClassIds.length > 1) {
+    // Multiple classes - show dropdown
+    const sel=e('select',{style:'width:auto'});
+    teacherClassIds.forEach(tcId=>{const cl=S.classes.find(c=>c.id===tcId); if(cl){const o=e('option',{value:cl.id});o.textContent=cl.name;if(cl.id===S.selClass)o.selected=true;sel.appendChild(o);}});
     sel.addEventListener('change',ev=>{S.selClass=ev.target.value;S.pending={};S.saveMsg=null;render();});
     hdr.appendChild(sel);
   }
@@ -1263,7 +1415,7 @@ function unsubscribePupils() {
 async function loadTeachersList() {
   if (teachersLoading) return;
   teachersLoading = true;
-  const {data, error} = await db.from('users').select('id,name,email,role,class_id').order('name');
+  const {data, error} = await db.from('users').select('id,name,email,role,class_id,avatar').order('name');
   if (!error) S.teachersList = (data || []).filter(u => u.role === 'teacher');
   else S.teachersList = [];
   teachersLoading = false;
@@ -1276,7 +1428,7 @@ function subscribeTeachersRealtime() {
   subscribeTeachersRealtime = () => {};
   if (teachersPolling) return;
   teachersPolling = setInterval(async () => {
-    const {data} = await db.from('users').select('id,name,email,role,class_id').order('name');
+    const {data} = await db.from('users').select('id,name,email,role,class_id,avatar').order('name');
     if (data) {
       S.teachersList = data.filter(u => u.role === 'teacher');
       render();
@@ -1295,17 +1447,48 @@ function unsubscribeAll() {
   unsubscribeTeachers();
 }
 
-async function uploadAvatar(file, bucket, prefix) {
-  const ext = file.name.split('.').pop();
-  const path = `${prefix}/${Date.now()}.${ext}`;
-  const {error} = await db.storage.from(bucket).upload(path, file, {upsert: true});
-  if (error) return null;
-  const {data} = db.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+async function uploadAvatar(file, prefix) {
+  const folder = prefix === 'pupils' ? 'pupil_avatars' : 'teacher_avatars';
+  const publicId = `${folder}_${Date.now()}`;
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('api_key', CLOUDINARY.apiKey);
+  formData.append('public_id', publicId);
+  formData.append('cloud_name', CLOUDINARY.cloudName);
+  formData.append('folder', folder);
+  formData.append('upload_preset', 'gh_hillview');
+  formData.append('timestamp', Math.round(Date.now() / 1000).toString());
+  
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY.cloudName}/image/upload`, {
+    method: 'POST',
+    body: formData
+  });
+  
+  const data = await res.json();
+  if (data.secure_url) {
+    console.log('Cloudinary upload success:', data.secure_url);
+    return data.secure_url;
+  }
+  console.error('Cloudinary upload failed:', data);
+  flashToast('Upload failed. Check console for details.', 'err');
+  return null;
+}
+
+async function getAvatarUrl(path) {
+  if (!path) return null;
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return path;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return path;
+  }
 }
 
 function initials(name) {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  return name.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2);
 }
 
 function openAvatarLightbox(src, name) {
@@ -1314,7 +1497,8 @@ function openAvatarLightbox(src, name) {
   const box = d('', 'text-align:center;max-width:400px;width:90vw');
   const nameEl = e('div', {style: 'font-size:15px;font-weight:700;color:#fff;margin-bottom:12px'});
   nameEl.textContent = name || '';
-  const img = e('img', {src, style: 'width:100%;max-width:320px;max-height:320px;border-radius:8px;border:3px solid #fff;object-fit:cover;box-shadow:0 8px 32px rgba(0,0,0,.5)'});
+  const img = e('img', {src, style: 'width:100%;max-width:320px;max-height:320px;border-radius:8px;border:3px solid #fff;object-fit:cover;box-shadow:0 8px 32px rgba(0,0,0,.5)', crossorigin: 'anonymous'});
+  img.onerror = () => { box.innerHTML = '<p style="color:#fff;font-size:18px;padding:40px">Image failed to load</p>'; };
   const closeBtn = e('button', {style: 'margin-top:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:#fff;padding:8px 24px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600'});
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => overlay.remove());
@@ -1346,6 +1530,7 @@ function ViewPupils() {
   const searchIn = e('input', {type: 'text', placeholder: 'Search pupils…', style: 'width:180px'});
   if (S.pupilSearch) searchIn.value = S.pupilSearch;
   searchIn.addEventListener('input', () => { S.pupilSearch = searchIn.value.trim(); render(); });
+  searchIn.addEventListener('keydown', ev => { if (ev.key === 'Enter') render(); });
   ab.appendChild(searchIn);
 
   const filterSel = e('select', {style: 'width:auto'});
@@ -1396,7 +1581,8 @@ function ViewPupils() {
       const avWrap = d('', 'width:42px;height:42px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--g);overflow:hidden;cursor:pointer');
       avWrap.title = 'Click to enlarge';
       if (p.avatar) {
-        const avImg = e('img', {src: p.avatar, style: 'width:100%;height:100%;object-fit:cover'});
+        const avImg = e('img', {src: p.avatar, style: 'width:100%;height:100%;object-fit:cover', crossorigin: 'anonymous'});
+        avImg.onerror = () => { avWrap.textContent = initials(p.name); avWrap.style.fontSize = '12px'; };
         avWrap.addEventListener('click', () => openAvatarLightbox(p.avatar, p.name));
         avWrap.appendChild(avImg);
       } else {
@@ -1435,15 +1621,14 @@ function triggerAvatarUpload(pupilId) {
   fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.style.display = 'none';
   fileInput.addEventListener('change', async ev => {
     if (!ev.target.files[0]) return;
-    const file = ev.target.files[0];
-    processAndUploadAvatar(file, pupilId, 'pupil_avatars', 'pupils');
+    processAndUploadAvatar(ev.target.files[0], pupilId, 'pupils');
   });
   document.body.appendChild(fileInput);
   fileInput.click();
   setTimeout(() => fileInput.remove(), 5000);
 }
 
-function processAndUploadAvatar(file, entityId, bucket, prefix) {
+function processAndUploadAvatar(file, entityId, prefix) {
   const reader = new FileReader();
   reader.onload = function(e) {
     const img = new Image();
@@ -1459,7 +1644,7 @@ function processAndUploadAvatar(file, entityId, bucket, prefix) {
       canvas.toBlob(async function(blob) {
         if (!blob) { flashToast('Image processing failed.', 'err'); return; }
         const croppedFile = new File([blob], file.name, {type: 'image/jpeg'});
-        const url = await uploadAvatar(croppedFile, bucket, prefix);
+        const url = await uploadAvatar(croppedFile, prefix);
         if (url) {
           if (prefix === 'pupils') {
             await db.from('pupils').update({avatar: url}).eq('id', entityId);
@@ -1568,6 +1753,7 @@ function ViewTeachers() {
   const searchIn = e('input', {type: 'text', placeholder: 'Search teachers…', style: 'width:180px'});
   if (S.teacherSearch) searchIn.value = S.teacherSearch;
   searchIn.addEventListener('input', () => { S.teacherSearch = searchIn.value.trim(); render(); });
+  searchIn.addEventListener('keydown', ev => { if (ev.key === 'Enter') render(); });
   ab.appendChild(searchIn);
 
   const filtered = S.teachersList.filter(t => {
@@ -1597,7 +1783,8 @@ function ViewTeachers() {
     av.style.cursor = 'pointer';
     av.title = 'Click to enlarge';
     if (t.avatar) {
-      const avImg = e('img', {src: t.avatar});
+      const avImg = e('img', {src: t.avatar, style: 'width:100%;height:100%;object-fit:cover', crossorigin: 'anonymous'});
+      avImg.onerror = () => { av.textContent = initials(t.name || 'T'); };
       av.addEventListener('click', () => openAvatarLightbox(t.avatar, t.name));
       av.appendChild(avImg);
     } else {
@@ -1630,10 +1817,6 @@ function ViewTeachers() {
     c.appendChild(card);
   });
 
-  const uploadZone = d('upload-zone', 'margin-top:20px');
-  uploadZone.innerHTML = '<div style="font-size:28px;margin-bottom:8px">📷</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">Upload teacher avatar</div><div class="upload-hint">Click to select image or drag & drop</div>';
-  c.appendChild(uploadZone);
-
   return c;
 }
 
@@ -1642,7 +1825,7 @@ function triggerTeacherAvatarUpload(teacherId) {
   fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.style.display = 'none';
   fileInput.addEventListener('change', ev => {
     if (!ev.target.files[0]) return;
-    processAndUploadAvatar(ev.target.files[0], teacherId, 'teacher_avatars', 'teachers');
+    processAndUploadAvatar(ev.target.files[0], teacherId, 'teachers');
   });
   document.body.appendChild(fileInput);
   fileInput.click();
@@ -1651,6 +1834,16 @@ function triggerTeacherAvatarUpload(teacherId) {
 
 async function openTeacherModal(teacher) {
   const isNew = !teacher;
+  let existingClassIds = [];
+  if (!isNew) {
+    const {data: tcData} = await db.from('teacher_classes').select('class_id').eq('teacher_id', teacher.id);
+    existingClassIds = (tcData || []).map(tc => tc.class_id);
+    if (existingClassIds.length === 0 && teacher.class_id) {
+      existingClassIds = [teacher.class_id];
+    }
+  }
+  S.teacherClassIds = existingClassIds;
+  
   const overlay = d('modal-overlay');
   const box = d('modal-box');
   const title = e('div', {class: 'modal-h'}); title.textContent = isNew ? 'Create New Teacher' : 'Edit Teacher';
@@ -1679,14 +1872,12 @@ async function openTeacherModal(teacher) {
   roleGroup.appendChild(roleLabel); roleGroup.appendChild(roleSel); box.appendChild(roleGroup);
 
   const clsGroup = d('form-group');
-  const clsLabel = e('label'); clsLabel.textContent = 'Assigned Class';
-  const clsSel = e('select', {id: 'tm-class'});
-  const noCls = e('option', {value: ''}); noCls.textContent = '— None —';
-  if (!isNew && !teacher.class_id) noCls.selected = true;
-  clsSel.appendChild(noCls);
+  const clsLabel = e('label'); clsLabel.textContent = 'Assigned Classes (Ctrl+Click for multiple)';
+  const clsSel = e('select', {id: 'tm-class', multiple: true, style: 'height:120px'});
   S.classes.forEach(cl => {
     const o = e('option', {value: cl.id}); o.textContent = cl.name;
-    if (!isNew && cl.id === teacher.class_id) o.selected = true;
+    if (!isNew && teacher.class_id === cl.id) o.selected = true;
+    if (!isNew && S.teacherClassIds?.includes(cl.id)) o.selected = true;
     clsSel.appendChild(o);
   });
   clsGroup.appendChild(clsLabel); clsGroup.appendChild(clsSel); box.appendChild(clsGroup);
@@ -1707,7 +1898,9 @@ async function openTeacherModal(teacher) {
     const name = nameIn.value.trim();
     const email = emailIn.value.trim();
     const role = roleSel.value;
-    const classId = clsSel.value || null;
+    const selectedOptions = [...clsSel.selectedOptions].map(o => o.value);
+    const classId = selectedOptions[0] || null; // First selected for users.class_id
+    const assignedClassIds = selectedOptions; // All selected for teacher_classes
     const pw = pwIn.value;
     if (!name) { flashToast('Name is required', 'err'); return; }
     saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spin"></span>';
@@ -1715,10 +1908,25 @@ async function openTeacherModal(teacher) {
       if (!email || !pw) { flashToast('Email and password required', 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
       try {
         const {data: authUser, error: authErr} = await db.auth.signUp({email, password: pw, options: {data: {name, role, class_id: classId}}});
-        if (authErr) { flashToast('Auth error: ' + authErr.message, 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
+        if (authErr) { 
+          if (authErr.message.includes('429') || authErr.message.includes('rate limit')) {
+            flashToast('Rate limited. Wait a moment then try again.', 'err');
+          } else {
+            flashToast('Auth error: ' + authErr.message, 'err');
+          }
+          saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; 
+        }
         if (!authUser || !authUser.user) { flashToast('Signup failed. Enable confirmations in Supabase settings.', 'err'); saveBtn.disabled = false; saveBtn.textContent = 'Create Teacher'; return; }
         const newUser = authUser.user;
         await db.from('users').insert({id: newUser.id, name, email, role, class_id: classId});
+        // Add to teacher_classes for all selected classes
+        for (const cid of assignedClassIds) {
+          try {
+            const {error: insErr} = await db.from('teacher_classes').insert({teacher_id: newUser.id, class_id: cid});
+            if (insErr) console.warn('Insert teacher_classes error:', insErr);
+          } catch(e) { console.warn('Insert catch:', e); }
+        }
+        console.log('Created teacher with classes:', assignedClassIds);
         S.teachersList.push({id: newUser.id, name, email, role, class_id: classId});
         flashToast('Teacher invited! Check email to confirm.', 'ok');
       } catch (err) {
@@ -1730,6 +1938,17 @@ async function openTeacherModal(teacher) {
       const updates = {name, role, class_id: classId};
       if (email) updates.email = email;
       await db.from('users').update(updates).eq('id', teacher.id);
+      // Update teacher_classes - delete existing and re-insert
+      try {
+        const {error: delErr} = await db.from('teacher_classes').delete().eq('teacher_id', teacher.id);
+        if (delErr) console.warn('Delete teacher_classes error:', delErr);
+        for (const cid of assignedClassIds) {
+          try {
+            const {error: insErr} = await db.from('teacher_classes').insert({teacher_id: teacher.id, class_id: cid});
+            if (insErr) console.warn('Insert teacher_classes error:', insErr);
+          } catch(e) { console.warn('Insert catch:', e); }
+        }
+      } catch(e) { console.warn('Teacher classes update catch:', e); }
       const idx = S.teachersList.findIndex(x => x.id === teacher.id);
       if (idx >= 0) S.teachersList[idx] = {...S.teachersList[idx], ...updates};
     }
@@ -1778,18 +1997,20 @@ async function deleteTeacher(teacher) {
       const cpw=pc.value;
       if(!pw||pw.length<6){flashToast('Password must be at least 6 characters','err');btn.disabled=false;btn.textContent='Set Password';return;}
       if(pw!==cpw){flashToast('Passwords do not match','err');btn.disabled=false;btn.textContent='Set Password';return;}
-      const {error}=await db.auth.updateUser({password:pw});
-      if(error){flashToast('Error: '+error.message,'err');btn.disabled=false;btn.textContent='Set Password';return;}
-      flashToast('Password set! Please sign in.','ok');
-      window.location.hash='';
-      render();
+      try {
+        const {error, data} = await db.auth.updateUser({password:pw});
+        if(error){flashToast('Error: '+error.message,'err');btn.disabled=false;btn.textContent='Set Password';return;}
+        flashToast('Password set! Please sign in.','ok');
+        window.location.hash='';
+        setTimeout(()=>render(),1500);
+      } catch(e) {
+        flashToast('Error setting password. Link may have expired.', 'err');
+        btn.disabled=false; btn.textContent='Set Password';
+      }
     };
     btn.addEventListener('click',doSet);
-    const enter=e('p',{style:'text-align:center;margin-top:12px;color:var(--muted)'});
-    enter.innerHTML='<a href="#">Already have an account? Sign in</a>';
-    enter.querySelector('a').addEventListener('click',e=>{e.preventDefault();render();});
 
-    wrap.appendChild(card); wrap.appendChild(enter); root.appendChild(wrap);
+    wrap.appendChild(card); root.appendChild(wrap);
   }
 
   // ══════════════════════════════════════════════════
@@ -1835,8 +2056,17 @@ function renderNavbar() {
   const nav=e('nav',{class:'navbar'});
   nav.innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="20" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M12 2L2 10h20L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="14" width="6" height="8" fill="rgba(255,255,255,.4)"/></svg>`;
   const t=e('span',{class:'nav-brand'}); t.textContent='Hill View Primary School'; nav.appendChild(t);
-  const u=e('span',{class:'nav-user'}); u.textContent=S.user.name; nav.appendChild(u);
-  const r=e('span',{class:'badge-role'}); r.textContent=S.user.role; nav.appendChild(r);
+  
+  const av=e('span',{style:'display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:12px'});
+  if (S.user.avatar) {
+    const avImg=e('img',{src:S.user.avatar,style:'width:28px;height:28px;border-radius:50%;object-fit:cover',crossorigin:'anonymous'});
+    avImg.onerror=()=>{av.innerHTML='';};
+    av.appendChild(avImg);
+  }
+  const u=e('span',{class:'nav-user'}); u.textContent=S.user.name; av.appendChild(u);
+  const r=e('span',{class:'badge-role'}); r.textContent=S.user.role; av.appendChild(r);
+  nav.appendChild(av);
+  
   const lo=e('button',{class:'btn-signout',onclick:signOut}); lo.textContent='Sign out'; nav.appendChild(lo);
   return nav;
 }
@@ -1916,7 +2146,15 @@ function render() {
     const params = new URLSearchParams(hash.slice(1));
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
+    const token = params.get('token');
+    const email = params.get('email');
     if (accessToken && refreshToken) {
+      await db.auth.setSession({access_token: accessToken, refresh_token: refreshToken});
+      window.location.hash = '';
+      renderPasswordSet();
+      return;
+    } else if (token && email) {
+      await db.auth.setSession({access_token: token, refresh_token: token});
       window.location.hash = '';
       renderPasswordSet();
       return;
@@ -1924,12 +2162,12 @@ function render() {
   }
   const {data:{session}}=await db.auth.getSession();
   if(session){
-    const {data:u}=await db.from('users').select('id,name,email,role,class_id').eq('id',session.user.id).single();
+    const {data:u}=await db.from('users').select('id,name,email,role,class_id,avatar').eq('id',session.user.id).single();
     if(u){S.user=u;S.view=u.role==='admin'?'overview':'marks';await loadAll();return;}
   }
   S.loading=false; render();
   db.auth.onAuthStateChange(ev=>{
-    if(ev==='SIGNED_OUT'){unsubscribeAll();Object.assign(S,{user:null,loading:false,classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,selPupilClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[]});render();}
+    if(ev==='SIGNED_OUT'){unsubscribeAll();Object.assign(S,{user:null,loading:false,classes:[],subjects:[],pupils:[],marksMap:{},classPerf:[],submissions:[],selClass:null,teacherClassIds:[],selPupilClass:null,pending:{},saving:false,saveMsg:null,reportPupils:[],reportSelId:null,reportSummary:null,reportSubjects:[],pupilsList:[],teachersList:[]});render();}
   });
 })();
 </script>
